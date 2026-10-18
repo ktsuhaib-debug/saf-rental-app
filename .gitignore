@@ -1,0 +1,12 @@
+# Only the app's code belongs here. Never commit business data.
+*.pdf
+*.csv
+*.xlsx
+*.jpg
+*.jpeg
+*.png
+*.txt
+.clasp.json
+.clasprc.json
+node_modules/
+.DS_Store
