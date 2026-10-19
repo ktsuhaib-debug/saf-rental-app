@@ -260,6 +260,11 @@ table.t td.r, table.t th.r { text-align: right; }
 .sigpad canvas { display: block; width: 100%; height: 150px; touch-action: none; cursor: crosshair; }
 .sig-hint { position: absolute; left: 12px; bottom: 10px; font-size: 13px; color: #8a90a0; pointer-events: none; }
 .sig-clear { position: absolute; right: 6px; top: 6px; }
+.tg-steps { margin: 0 0 12px; padding-left: 20px; display: grid; gap: 4px; }
+.tg-steps a { color: var(--ink); }
+.tg-step { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.tg-step > b { width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: var(--navy-ink); display: grid; place-items: center; font-size: 13px; flex: none; }
+.tg-step > span { flex: 1 1 140px; min-width: 0; }
 .pdf-frame { width: 100%; height: 60vh; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 8px; }
 .photos .ph { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); max-width: 100%; }
@@ -1034,9 +1039,10 @@ function viewPartners() {
     '</tbody></table></div></section>';
 
   h += statementCard();
+  h += telegramCard();
   h += updatesCard();
   h += '<section class="card"><div class="card-head"><h3>Team and settings</h3>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="settings">Settings</button>' : '') + '</div><div class="list">' +
-    T('Partners').map(function (p) { return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.Partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.Partner)) + (p.Partner === USER.partner ? ' <span class="pill neutral">You</span>' : '') + '</div><div class="sub">' + esc(p.Role || 'Partner') + (p.Active === false ? ' · no access' : '') + ' · ' + (p.hasPin === false ? '<b style="color:var(--warn)">no PIN yet</b>' : 'PIN set') + '</div></div>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="partner" data-id="' + esc(p.Partner) + '">Edit</button>' : '') + '</div>'; }).join('') +
+    T('Partners').map(function (p) { return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.Partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.Partner)) + (p.Partner === USER.partner ? ' <span class="pill neutral">You</span>' : '') + '</div><div class="sub">' + esc(p.Role || 'Partner') + (p.Active === false ? ' · no access' : '') + ' · ' + (p.hasPin === false ? '<b style="color:var(--warn)">no PIN yet</b>' : 'PIN set') + (p.hasTelegram ? ' · Telegram' : '') + '</div></div>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="partner" data-id="' + esc(p.Partner) + '">Edit</button>' : '') + '</div>'; }).join('') +
     '</div><div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" data-act="form" data-form="pin">Change my PIN</button><button class="btn ghost sm" data-act="logout">Sign out</button></div>' + (USER.role === 'Admin' ? '<div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" data-act="form" data-form="partner">Add partner</button><button class="btn ghost sm" data-act="form" data-form="investment">Add investment</button></div>' : '') + '</section>';
   return h;
 }
@@ -1829,6 +1835,65 @@ function openStatement(mk) {
     pdfReady(r, html, waLink('', setting('Business Name', 'Rental Hub') + ' monthly statement for ' + label + ':\n' + (r.url || '')));
   }).catch(function (e) { pdfFailed(e, 'statement', mk); });
 }
+/* ---------- Telegram alerts ---------- */
+var TG = { loaded: false, loading: false, st: null, link: null, linkAt: 0, busy: '', editBot: false };
+var TG_OPTS = [['All', 'Everything'], ['Trips', 'Trips only'], ['Money', 'Money only'], ['Morning summary only', 'Morning summary only'], ['Off', 'Nothing']];
+function tgLoad(force) {
+  if ((TG.loaded && !force) || TG.loading) return;
+  TG.loading = true;
+  serverCall('tgStatus', {}).then(function (r) { TG.st = r; }).catch(function () {}).then(function () {
+    TG.loaded = true; TG.loading = false;
+    if (TG.st && TG.st.botSet && !TG.st.me.connected && (!TG.link || Date.now() - TG.linkAt > 15 * 60000)) {
+      serverCall('tgLink', {}).then(function (l) { TG.link = l; TG.linkAt = Date.now(); }).catch(function () {}).then(tgRender);
+    } else tgRender();
+  });
+}
+function tgRender() { if (S.view === 'partners' && !document.querySelector('.scrim')) render(); }
+function telegramCard() {
+  tgLoad();
+  var st = TG.st, h = '<section class="card" id="tgCard"><div class="card-head"><h3>Telegram alerts</h3>' + (st && st.bot ? '<span class="small muted">@' + esc(st.bot) + '</span>' : '') + '</div>';
+  if (!TG.loaded || !st) return h + '<div class="small muted">Loading…</div></section>';
+  if (!st.botSet || (TG.editBot && isAdmin())) {
+    if (!isAdmin()) return h + '<p class="small muted" style="margin:0">Get a message on Telegram whenever something is entered in the app. Ask ' + esc(adminName()) + ' to set up the bot first.</p></section>';
+    return h + '<p class="small" style="margin:0 0 8px">Get a Telegram message whenever someone enters something, plus a summary every morning at 8:00. First create the bot (once):</p>' +
+      '<ol class="small tg-steps"><li>In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> and tap <b>Start</b>.</li><li>Send <b>/newbot</b>. Name it <b>SAF Rental</b>, then pick a username ending in <b>bot</b>, for example <b>saf_rental_alerts_bot</b>.</li><li>BotFather replies with a token like <b>123456789:AAF…</b>. Copy it and paste it here.</li></ol>' +
+      '<div class="fields"><div class="field full"><label for="tgToken">Bot token</label><input id="tgToken" type="password" autocomplete="off" placeholder="123456789:AA…"></div></div>' +
+      '<div class="btn-row" style="margin-top:10px"><button class="btn primary sm" type="button" data-act="tgSaveBot"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'bot' ? 'Checking…' : 'Save bot') + '</button>' + (st.botSet ? '<button class="btn ghost sm" type="button" data-act="tgEditBotCancel">Cancel</button>' : '') + '</div></section>';
+  }
+  if (!st.me.connected) {
+    h += '<p class="small" style="margin:0 0 10px">Connect your Telegram to get alerts on your phone.</p>' +
+      '<div class="tg-step"><b>1</b><span>Open the bot and tap <b>Start</b>.</span>' + (TG.link ? '<a class="btn primary sm" href="' + esc(TG.link.url) + '" target="_blank" rel="noopener">Open Telegram</a>' : '<span class="small muted">…</span>') + '</div>' +
+      '<div class="tg-step"><b>2</b><span>Come back here and tap:</span><button class="btn dark sm" type="button" data-act="tgConfirm"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'confirm' ? 'Checking…' : 'I tapped Start') + '</button></div>';
+  } else {
+    h += '<div class="alert" style="background:var(--good-bg)"><span style="color:var(--good)">' + icon('in') + '</span><span><b>Your Telegram is connected</b></span></div>' +
+      '<div class="fields" style="margin-top:10px"><div class="field full"><label for="tgAlerts">Send me</label><select id="tgAlerts" data-act="tgPrefs">' + opts(TG_OPTS, st.me.alerts) + '</select></div></div>' +
+      '<label class="small" style="display:flex;gap:10px;align-items:center;font-weight:600;margin-top:10px"><input type="checkbox" id="tgOwn" data-act="tgPrefs"' + (st.me.own ? ' checked' : '') + ' style="width:20px;height:20px"> Also tell me about my own entries</label>' +
+      '<p class="small muted" style="margin:6px 0 0">Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions. Everyone except "Nothing" gets the morning summary.</p>' +
+      '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="tgTest"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'test' ? 'Sending…' : 'Send test message') + '</button><button class="btn ghost sm" type="button" data-act="tgDisconnect">Disconnect</button></div>';
+  }
+  if (isAdmin() && st.partners) {
+    h += '<div class="eyebrow" style="margin:16px 0 4px">Partners</div><div class="list">' + st.partners.map(function (p) {
+      return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.partner)) + '</div><div class="sub">' + (p.connected ? (TG_OPTS.filter(function (o) { return o[0] === p.alerts; })[0] || ['', 'Everything'])[1] : 'Not connected yet') + '</div></div>' + (p.connected ? '<span class="pill good">Connected</span>' : '<span class="pill neutral">Not connected</span>') + '</div>';
+    }).join('') + '</div><div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="tgMorning"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'morning' ? 'Sending…' : 'Send morning summary now') + '</button><button class="btn ghost sm" type="button" data-act="tgEditBot">Change bot</button></div>';
+  }
+  return h + '</section>';
+}
+function tgAct(act, el) {
+  if (act === 'tgEditBot') { TG.editBot = true; return render(); }
+  if (act === 'tgEditBotCancel') { TG.editBot = false; return render(); }
+  if (TG.busy) return;
+  var name = { tgSaveBot: 'bot', tgConfirm: 'confirm', tgTest: 'test', tgMorning: 'morning', tgDisconnect: 'disc', tgPrefs: 'prefs' }[act], pr;
+  if (act === 'tgSaveBot') { var tk = val('tgToken'); if (!tk) return toast('Paste the bot token first.', true); pr = serverCall('tgSaveBot', { token: tk }).then(function (r) { TG.st = r; TG.editBot = false; TG.link = null; toast('Telegram bot saved'); return serverCall('tgLink', {}).then(function (l) { TG.link = l; TG.linkAt = Date.now(); }); }); }
+  if (act === 'tgConfirm') pr = serverCall('tgConfirm', {}).then(function (r) { TG.st = r; toast('Telegram connected'); });
+  if (act === 'tgTest') pr = serverCall('tgTest', {}).then(function () { toast('Test message sent. Check Telegram.'); });
+  if (act === 'tgMorning') pr = serverCall('tgMorningSend', {}).then(function () { toast('Morning summary sent'); });
+  if (act === 'tgDisconnect') pr = serverCall('tgDisconnect', {}).then(function (r) { TG.st = r; TG.link = null; return serverCall('tgLink', {}).then(function (l) { TG.link = l; TG.linkAt = Date.now(); }); });
+  if (act === 'tgPrefs') pr = serverCall('tgPrefs', { alerts: val('tgAlerts'), own: document.getElementById('tgOwn').checked }).then(function (r) { TG.st = r; toast('Saved'); });
+  if (!pr) return;
+  TG.busy = name; if (act !== 'tgPrefs') render();
+  pr.catch(function (e) { toast(e.message, true); }).then(function () { TG.busy = ''; render(); });
+}
+
 /* ---------- App updates (admin only) ---------- */
 var UPD = { loaded: false, loading: false, hasToken: false, editToken: false, busy: '', res: null, done: '' };
 function updatesCard() {
@@ -2023,6 +2088,7 @@ document.addEventListener('click', function (ev) {
   else if (act === 'statement') { var mk = id || val('stMonth'); closeSheet(); openStatement(mk); }
   else if (act === 'sharePdf') sharePdf();
   else if (/^upd/.test(act)) updAct(act);
+  else if (/^tg/.test(act) && act !== 'tgPrefs') tgAct(act, el);
   else if (act === 'rate') { closeSheet(); openRate(id); }
   else if (act === 'enqBook' || act === 'enqCheckout') enquiryToBooking(id, act === 'enqCheckout');
   else if (act === 'trip') { closeSheet(); openTrip(id); }
@@ -2112,6 +2178,7 @@ document.addEventListener('change', function (ev) {
   if (act === 'month') { S.moneyMonth = el.value; render(); }
   if (act === 'period') { S.period = el.value; if (el.value === 'custom' && !S.pFrom) { var r0 = periodRange(); S.pFrom = r0.from; S.pTo = r0.to; } render(); }
   if (act === 'wscheck' && M.wscheck) M.wscheck();
+  if (act === 'tgPrefs') tgAct('tgPrefs', el);
   if (el.id === 'f_trip' && document.getElementById('payFree')) document.getElementById('payFree').hidden = !!el.value;
   if (act === 'bkcheck' && M.bkcheck) { if (el.id === 'bk_vehicle') document.getElementById('bk_rate').value = lastRate(el.value) || val('bk_rate'); M.bkcheck(); }
   if (act === 'coVehicle') { if (M.cocheck) setTimeout(M.cocheck, 0); document.getElementById('co_startOdo').value = currentOdo(el.value) || ''; document.getElementById('co_rate').value = lastRate(el.value); }
@@ -2239,6 +2306,13 @@ var Mock = (function () {
     },
     rate: function (p) { var t = tbl('Trips').filter(function (x) { return x['Trip ID'] === p.tripId; })[0]; if (!t) throw new Error('Trip not found.'); t.Rating = p.rating; t['Rating Note'] = p.note || ''; log('Rated customer', t['Customer Name'] + ' · ' + p.rating); return true; },
     makePdf: function () { return { demo: true }; },
+    tgStatus: function () { return Mock.__tg || (Mock.__tg = { botSet: true, bot: 'saf_rental_alerts_bot', morning: true, me: { connected: false, alerts: 'All', own: false }, partners: [{ partner: 'RAHUL', connected: false, alerts: 'All' }, { partner: 'SAMEER', connected: true, alerts: 'All' }, { partner: 'VINOD', connected: true, alerts: 'Trips' }] }); },
+    tgLink: function () { return { code: 'demo', url: 'https://t.me/saf_rental_alerts_bot?start=demo' }; },
+    tgConfirm: function () { var s = this.tgStatus(); s.me.connected = true; s.partners[0].connected = true; return s; },
+    tgPrefs: function (p) { var s = this.tgStatus(); s.me.alerts = p.alerts; s.me.own = p.own; return s; },
+    tgDisconnect: function () { var s = this.tgStatus(); s.me.connected = false; s.partners[0].connected = false; return s; },
+    tgTest: function () { return true; }, tgMorningSend: function () { return true; },
+    tgSaveBot: function () { return this.tgStatus(); },
     updateStatus: function () { return { current: 'preview', hasToken: true }; },
     saveGithubToken: function () { return { hasToken: true }; },
     checkUpdate: function () { return { current: 'preview', latest: '2026-10-19.1', notes: 'Preview only. Updates run in the real app.', newer: false }; },
@@ -2450,6 +2524,16 @@ var ML = {
   "Only needed if the saf-rental-app repository is private. A read-only token, kept in the app's private settings, never in the code.": 'saf-rental-app പ്രൈവറ്റ് ആണെങ്കിൽ മാത്രം വേണം. വായിക്കാൻ മാത്രമുള്ള ടോക്കൺ, ആപ്പിന്റെ സ്വകാര്യ സെറ്റിങ്സിൽ സൂക്ഷിക്കും, കോഡിൽ ഇല്ല.', 'Checking…': 'പരിശോധിക്കുന്നു…', 'Close the app fully and open it again.': 'ആപ്പ് പൂർണമായി അടച്ച് വീണ്ടും തുറക്കുക.', 'You have the latest version': 'ഏറ്റവും പുതിയ വേർഷൻ തന്നെയാണ്',
   'Update now': 'ഇപ്പോൾ അപ്ഡേറ്റ് ചെയ്യുക', 'Updating…': 'അപ്ഡേറ്റ് ചെയ്യുന്നു…', 'This takes about half a minute. Keep the app open.': 'ഏകദേശം അര മിനിറ്റ് എടുക്കും. ആപ്പ് തുറന്നു വെക്കുക.',
   'Check for updates': 'അപ്ഡേറ്റ് ഉണ്ടോ എന്ന് നോക്കുക', 'Change GitHub token': 'GitHub ടോക്കൺ മാറ്റുക', 'Paste the GitHub token first.': 'ആദ്യം GitHub ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'GitHub connected': 'GitHub കണക്റ്റ് ചെയ്തു', 'Updated the app': 'ആപ്പ് അപ്ഡേറ്റ് ചെയ്തു',
+  'Telegram alerts': 'ടെലിഗ്രാം അലേർട്ടുകൾ', 'Loading…': 'ലോഡ് ചെയ്യുന്നു…', 'Get a message on Telegram whenever something is entered in the app. Ask': 'ആപ്പിൽ എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ് വരും. ബോട്ട് സെറ്റ് ചെയ്യാൻ',
+  'to set up the bot first.': '-നോട് പറയുക.', 'Get a Telegram message whenever someone enters something, plus a summary every morning at 8:00. First create the bot (once):': 'ആരെങ്കിലും എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ്, കൂടാതെ എല്ലാ ദിവസവും രാവിലെ 8:00-ന് ഒരു സംഗ്രഹം. ആദ്യം ബോട്ട് ഉണ്ടാക്കുക (ഒരിക്കൽ മാത്രം):',
+  'Bot token': 'ബോട്ട് ടോക്കൺ', 'Save bot': 'ബോട്ട് സേവ് ചെയ്യുക', 'Connect your Telegram to get alerts on your phone.': 'ഫോണിൽ അലേർട്ട് കിട്ടാൻ നിങ്ങളുടെ ടെലിഗ്രാം കണക്റ്റ് ചെയ്യുക.',
+  'Open the bot and tap': 'ബോട്ട് തുറന്ന്', 'Start': 'Start', 'Come back here and tap:': 'ഇവിടെ തിരികെ വന്ന് അമർത്തുക:', 'Open Telegram': 'ടെലിഗ്രാം തുറക്കുക', 'I tapped Start': 'Start അമർത്തി',
+  'Your Telegram is connected': 'നിങ്ങളുടെ ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Send me': 'എനിക്ക് അയയ്ക്കേണ്ടത്', 'Everything': 'എല്ലാം', 'Trips only': 'ട്രിപ്പുകൾ മാത്രം', 'Money only': 'പണം മാത്രം', 'Morning summary only': 'രാവിലത്തെ സംഗ്രഹം മാത്രം', 'Nothing': 'ഒന്നും വേണ്ട',
+  'Also tell me about my own entries': 'ഞാൻ ചേർക്കുന്നവയും അറിയിക്കുക',
+  'Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions. Everyone except "Nothing" gets the morning summary.': 'ട്രിപ്പുകൾ: ചെക്ക് ഔട്ട്, ചെക്ക് ഇൻ, ബുക്കിങ്, അന്വേഷണം, വർക്ക്ഷോപ്പ്. പണം: പേയ്മെന്റ്, ചെലവ്, ഡിവിഡന്റ്, കൈമാറ്റം, ഡിലീറ്റ്. "ഒന്നും വേണ്ട" ഒഴികെ എല്ലാവർക്കും രാവിലത്തെ സംഗ്രഹം കിട്ടും.',
+  'Send test message': 'ടെസ്റ്റ് മെസേജ് അയയ്ക്കുക', 'Sending…': 'അയയ്ക്കുന്നു…', 'Disconnect': 'ഡിസ്കണക്റ്റ്', 'Not connected yet': 'ഇതുവരെ കണക്റ്റ് ചെയ്തിട്ടില്ല', 'Send morning summary now': 'രാവിലത്തെ സംഗ്രഹം ഇപ്പോൾ അയയ്ക്കുക', 'Change bot': 'ബോട്ട് മാറ്റുക',
+  'Paste the bot token first.': 'ആദ്യം ബോട്ട് ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'Telegram bot saved': 'ടെലിഗ്രാം ബോട്ട് സേവ് ചെയ്തു', 'Telegram connected': 'ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Test message sent. Check Telegram.': 'ടെസ്റ്റ് മെസേജ് അയച്ചു. ടെലിഗ്രാം നോക്കുക.', 'Morning summary sent': 'രാവിലത്തെ സംഗ്രഹം അയച്ചു',
+  'Connected Telegram': 'ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Set up Telegram alerts': 'ടെലിഗ്രാം അലേർട്ടുകൾ സെറ്റ് ചെയ്തു',
   'PIN set': 'PIN ഉണ്ട്', 'No PIN': 'PIN ഇല്ല', 'No PIN yet': 'PIN ഇല്ല', 'split by ownership': 'ഉടമസ്ഥത അനുസരിച്ച്',
   'Recorded as a cash handover': 'പണം കൈമാറ്റമായി രേഖപ്പെടുത്തും', 'Recorded as a dividend': 'ഡിവിഡന്റായി രേഖപ്പെടുത്തും',
   /* Server messages */

@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-19.2",
-  "notes": "Updates now read the public files directly, so they work without a GitHub token.",
+  "version": "2026-10-19.3",
+  "notes": "Telegram alerts: each partner gets a message when something is entered, plus a morning summary at 8:00.",
   "files": ["Code.gs", "Index.html"]
 }

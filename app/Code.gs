@@ -13,7 +13,7 @@ var APP_NAME = 'Rental Hub';
 
 // One-tap updates: the app pulls new code from GitHub and moves its own deployment to it.
 // APP_VERSION must match app/version.json in the repository.
-var APP_VERSION = '2026-10-19.2';
+var APP_VERSION = '2026-10-19.3';
 var GITHUB_REPO = 'ktsuhaib-debug/saf-rental-app';
 var GITHUB_BRANCH = 'main';
 var DEPLOYMENT_ID = 'AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ2GjO49JhZTLByxQ';
@@ -23,7 +23,7 @@ var DEPLOYMENT_ID = 'AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ
 /* ------------------------------------------------------------------ */
 var SCHEMA = {
   Settings:    ['Key', 'Value', 'Notes'],
-  Partners:    ['Partner', 'Email', 'Role', 'Active', 'PIN'],
+  Partners:    ['Partner', 'Email', 'Role', 'Active', 'PIN', 'Telegram Chat ID', 'Telegram Alerts', 'Telegram Own'],
   Vehicles:    ['Vehicle ID', 'Name', 'Reg No', 'Purchase Date', 'Purchase Price', 'Extra Costs', 'Photo', 'Status', 'Notes', 'Chassis No', 'Engine No', 'FASTag ID', 'Workshop Since', 'Workshop Until', 'Workshop Notes'],
   Investments: ['Investment ID', 'Date', 'Vehicle ID', 'Partner', 'Amount', 'Notes'],
   Customers:   ['Customer ID', 'Name', 'Mobile', 'ID Proof', 'Notes', 'Blocked', 'Created At'],
@@ -49,7 +49,7 @@ var NUM_COLS = ['Purchase Price', 'Extra Costs', 'Amount', 'Start Odometer', 'En
                 'Days', 'Km Driven', 'Extra Km', 'Extra Km Charge', 'Late Fee', 'Fuel Charge', 'Damage Charge', 'Discount',
                 'Bill Total', 'Paid', 'Balance', 'Deposit Refunded', 'Deposit Deducted', 'Due Odometer',
                 'FASTag Out', 'FASTag In', 'Toll Charge', 'Fine Charge'];
-var BOOL_COLS = ['Active', 'Blocked'];
+var BOOL_COLS = ['Active', 'Blocked', 'Telegram Own'];
 
 var DEFAULT_SETTINGS = [
   ['Business Name', 'Rental Hub', 'Shown in the app header'],
@@ -117,8 +117,10 @@ function setup() {
   photoFolder_();
   ensureLogo_();
   formatDateColumns_();
+  var morning = '';
+  try { installMorningTrigger_(); } catch (e) { morning = ' Morning summary not switched on yet: update appsscript.json (it needs the script.scriptapp permission) and run setup again.'; }
   var noPin = readTable_('Partners').filter(function (r) { return r['Active'] !== false && !String(r['PIN'] || '').trim(); }).map(function (r) { return r['Partner']; });
-  return 'Setup complete.' + (noPin.length ? ' Add a PIN in the Partners tab for: ' + noPin.join(', ') : ' Every partner has a PIN.');
+  return 'Setup complete.' + morning + (noPin.length ? ' Add a PIN in the Partners tab for: ' + noPin.join(', ') : ' Every partner has a PIN.');
 }
 
 /**
@@ -444,7 +446,7 @@ function photos_(ids, full) {
 function bootstrap_(user) {
   var tables = {};
   Object.keys(SCHEMA).forEach(function (name) { if (name !== 'Activity') tables[name] = readTable_(name); });
-  tables.Partners = tables.Partners.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== 'PIN') o[k] = r[k]; }); o.hasPin = !!String(r['PIN'] || '').trim(); return o; });
+  tables.Partners = tables.Partners.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== 'PIN' && k !== 'Telegram Chat ID') o[k] = r[k]; }); o.hasPin = !!String(r['PIN'] || '').trim(); o.hasTelegram = !!String(r['Telegram Chat ID'] || '').replace(/^'/, ''); return o; });
   var act = readTable_('Activity');
   tables.Activity = act.slice(-60).reverse();
   return { user: user, tables: tables, serverTime: nowIso_(), appVersion: APP_VERSION };
@@ -1110,3 +1112,241 @@ function importOld_(user) {
   log_(user, 'Imported from AppSheet', summary);
   return { summary: summary };
 }
+
+/* ------------------------------------------------------------------ */
+/* Telegram alerts: the bot messages each partner privately            */
+/* ------------------------------------------------------------------ */
+var TG_ALERTS = ['All', 'Trips', 'Money', 'Morning summary only', 'Off'];
+var TG_TRIPS = ['checkOut', 'book', 'cancelBooking', 'checkIn', 'workshop', 'enquiry'];
+
+function tgProp_(k, v) { var pr = PropertiesService.getScriptProperties(); if (v === undefined) return pr.getProperty(k) || ''; if (v === null) pr.deleteProperty(k); else pr.setProperty(k, v); return v; }
+function h_(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function cap_(s) { s = String(s || ''); return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
+/** Indian grouping: 1,25,000 */
+function inr_(v) {
+  var n = Math.round(num_(v)), neg = n < 0, s = String(Math.abs(n)), last = s.slice(-3), rest = s.slice(0, -3);
+  if (rest) last = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + last;
+  return (neg ? '-₹' : '₹') + last;
+}
+/** '2026-10-22T18:00' → '22/10/2026 18:00' */
+function dmy_(iso, withTime) {
+  var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (!m) return '';
+  return m[3] + '/' + m[2] + '/' + m[1] + (withTime !== false && m[4] && !(m[4] === '00' && m[5] === '00') ? ' ' + m[4] + ':' + m[5] : '');
+}
+function carName_(id) { var v = id ? getRow_('Vehicles', id) : null; return v ? v['Name'] : (id ? id : 'General'); }
+
+function tgApi_(method, payload) {
+  var token = tgProp_('TG_TOKEN');
+  if (!token) throw new Error('The Telegram bot is not set up yet.');
+  var r = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/' + method, { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload || {}), muteHttpExceptions: true });
+  var j = {}; try { j = JSON.parse(r.getContentText()); } catch (e) { j = {}; }
+  if (!j.ok) { var err = new Error(j.description ? 'Telegram: ' + j.description : 'Telegram could not be reached.'); err.code = 'TG'; throw err; }
+  return j.result;
+}
+/** Send one message to several chats at once. Never throws: an alert must not break a save. */
+function tgSendMany_(chatIds, html) {
+  var token = tgProp_('TG_TOKEN'); if (!token || !chatIds.length) return 0;
+  var reqs = chatIds.map(function (id) {
+    return { url: 'https://api.telegram.org/bot' + token + '/sendMessage', method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+      payload: JSON.stringify({ chat_id: id, text: html, parse_mode: 'HTML', disable_web_page_preview: true }) };
+  });
+  try { return UrlFetchApp.fetchAll(reqs).filter(function (r) { return r.getResponseCode() === 200; }).length; } catch (e) { console.error('Telegram', e); return 0; }
+}
+function tgPartners_() {
+  return readTable_('Partners').filter(function (r) { return r['Active'] !== false && String(r['Telegram Chat ID'] || '').replace(/^'/, ''); });
+}
+/** Who should get an alert about this kind of entry made by `actor`. */
+function tgRecipients_(kind, actor) {
+  var isTrip = TG_TRIPS.indexOf(kind) > -1;
+  return tgPartners_().filter(function (r) {
+    var pref = r['Telegram Alerts'] || 'All';
+    if (pref === 'Off' || pref === 'Morning summary only') return false;
+    if (pref === 'Trips' && !isTrip) return false;
+    if (pref === 'Money' && isTrip) return false;
+    if (String(r['Partner']).toUpperCase() === String(actor).toUpperCase() && r['Telegram Own'] !== true) return false;
+    return true;
+  }).map(function (r) { return String(r['Telegram Chat ID']).replace(/^'/, ''); });
+}
+function tgNotify_(kind, user, html) {
+  if (!tgProp_('TG_TOKEN')) return;
+  var to = tgRecipients_(kind, user.partner);
+  if (to.length) tgSendMany_(to, html);
+}
+
+/** Build and send the alert for an action that just succeeded. */
+function tgAfter_(action, p, user, r, before) {
+  if (!tgProp_('TG_TOKEN')) return;
+  var who = '<b>' + h_(cap_(user.partner)) + '</b>', t, msg = '', kind = action;
+  if (['checkOut', 'book', 'cancelBooking', 'checkIn', 'addCharge'].indexOf(action) > -1) t = getRow_('Trips', (r && r.tripId) || p.tripId);
+  if (action === 'checkOut' && t) {
+    msg = '🚗 ' + who + ' checked out a car\n<b>' + h_(carName_(t['Vehicle ID'])) + '</b> → ' + h_(t['Customer Name']) + (t['Mobile'] ? ' (' + h_(t['Mobile']) + ')' : '') +
+      '\n' + inr_(t['Rate Per Day']) + '/day' + (t['Expected Return'] ? ' · back ' + dmy_(t['Expected Return']) : '') + (num_(t['Paid']) ? '\nAdvance ' + inr_(t['Paid']) : '') + (num_(t['Deposit']) ? ' · deposit ' + inr_(t['Deposit']) : '');
+  } else if (action === 'book' && t) {
+    msg = (p.tripId ? '✏️ ' + who + ' changed a booking\n' : '📅 ' + who + ' made a booking\n') + '<b>' + h_(carName_(t['Vehicle ID'])) + '</b> · ' + h_(t['Customer Name']) +
+      '\n' + dmy_(t['Out At']) + ' → ' + dmy_(t['Expected Return']) + (num_(t['Paid']) ? '\nAdvance ' + inr_(t['Paid']) : '');
+  } else if (action === 'cancelBooking' && t) {
+    msg = '❌ ' + who + ' cancelled a booking\n' + h_(t['Customer Name']) + ' · ' + h_(carName_(t['Vehicle ID'])) + ' · ' + dmy_(t['Out At']) + (num_(p.refund) ? '\nRefunded ' + inr_(p.refund) : '');
+  } else if (action === 'checkIn' && t) {
+    msg = '✅ ' + who + ' checked in a car\n<b>' + h_(carName_(t['Vehicle ID'])) + '</b> ← ' + h_(t['Customer Name']) +
+      '\nBill ' + inr_(t['Bill Total']) + ' · paid ' + inr_(t['Paid']) + (num_(t['Balance']) > 0 ? ' · <b>' + inr_(t['Balance']) + ' still due</b>' : '') +
+      (t['Km Driven'] !== '' && t['Km Driven'] != null ? '\n' + h_(t['Km Driven']) + ' km' : '') + (t['Rating'] ? ' · rated ' + h_(t['Rating']) : '');
+  } else if (action === 'addCharge' && t) {
+    kind = 'money';
+    msg = '🧾 ' + who + ' added a ' + (p.kind === 'Toll' ? 'toll' : 'traffic fine') + ' to a bill\n' + inr_(p.amount) + ' · ' + h_(t['Customer Name']) + (p.note ? ' · ' + h_(p.note) : '') + (num_(t['Balance']) > 0 ? '\nNow due: ' + inr_(t['Balance']) : '');
+  } else if (action === 'addPayment') {
+    kind = 'money';
+    var tr = p.tripId ? getRow_('Trips', p.tripId) : null;
+    msg = '💰 ' + who + ' recorded a payment\n' + inr_(p.amount) + ' from ' + h_(tr ? tr['Customer Name'] : (p.customerName || 'customer')) + ' · ' + h_(p.mode || '') + ' · received by ' + h_(cap_(p.receivedBy || user.partner)) +
+      (tr && num_(tr['Balance']) > 0 ? '\nStill due: ' + inr_(tr['Balance']) : tr ? '\nFully paid' : '');
+  } else if (action === 'workshop') {
+    var v = getRow_('Vehicles', p.vehicleId) || {};
+    msg = p.on ? '🔧 ' + who + ' sent <b>' + h_(v['Name']) + '</b> to the workshop' + (v['Workshop Notes'] ? '\n' + h_(v['Workshop Notes']) : '') + (v['Workshop Until'] ? '\nExpected back ' + dmy_(v['Workshop Until'], false) : '')
+      : '🔧 <b>' + h_(v['Name']) + '</b> is back from the workshop (' + h_(cap_(user.partner)) + ')' + (num_(p.cost) ? '\nBill ' + inr_(p.cost) + ' paid by ' + h_(cap_(p.paidBy || user.partner)) : '');
+  } else if (action === 'save' && r) {
+    var tb = p.table, edited = !!before, x = r, verb = edited ? 'edited' : 'added';
+    kind = tb === 'Enquiries' ? 'enquiry' : 'money';
+    if (tb === 'Expenses') msg = '💸 ' + who + ' ' + verb + ' an expense\n' + inr_(x['Amount']) + ' · ' + h_(x['Type']) + (x['Description'] ? ' · ' + h_(x['Description']) : '') + '\n' + h_(carName_(x['Vehicle ID'])) + ' · paid by ' + h_(cap_(x['Paid By']));
+    else if (tb === 'Payments') msg = '💰 ' + who + ' ' + verb + ' income\n' + inr_(x['Amount']) + ' · ' + h_(x['Type']) + (x['Customer Name'] ? ' · ' + h_(x['Customer Name']) : '') + ' · received by ' + h_(cap_(x['Received By']));
+    else if (tb === 'Transfers') msg = '🔁 ' + who + ' ' + verb + ' a cash handover\n' + h_(x['From'] === 'Capital' ? 'Business capital' : cap_(x['From'])) + ' → ' + h_(cap_(x['To'])) + ' · ' + inr_(x['Amount']);
+    else if (tb === 'Dividends') msg = '🎁 ' + who + ' ' + verb + ' a dividend\n' + inr_(x['Amount']) + ' to ' + h_(cap_(x['Partner'])) + ' · paid by ' + h_(cap_(x['Paid By']));
+    else if (tb === 'Sales') msg = '🏷️ ' + who + ' ' + verb + ' a car sale\n' + h_(carName_(x['Vehicle ID'])) + ' · ' + inr_(x['Amount']) + (x['Buyer'] ? ' · ' + h_(x['Buyer']) : '');
+    else if (tb === 'Enquiries' && !edited) msg = '📞 ' + who + ' added an enquiry\n' + h_(x['Name']) + (x['Mobile'] ? ' (' + h_(x['Mobile']) + ')' : '') + ' · ' + h_(x['Vehicle ID'] ? carName_(x['Vehicle ID']) : 'any car') +
+      (x['Wanted From'] ? '\n' + dmy_(x['Wanted From'], false) + (x['Wanted To'] ? ' → ' + dmy_(x['Wanted To'], false) : '') : '') + (x['Source'] ? ' · ' + h_(x['Source']) : '');
+  } else if (action === 'remove' && before) {
+    kind = p.table === 'Enquiries' ? 'enquiry' : 'money';
+    msg = '🗑️ ' + who + ' deleted ' + (function (l) { return (/^[aeiou]/.test(l) ? 'an ' : 'a ') + l; })(LABELS[p.table] || 'record') + '\n' +
+      [before['Amount'] !== undefined && before['Amount'] !== '' ? inr_(before['Amount']) : '', h_(before['Type'] || before['Item'] || before['Name'] || ''), before['Date'] ? dmy_(before['Date'], false) : ''].filter(String).join(' · ');
+  }
+  if (msg) tgNotify_(kind, user, msg);
+}
+/** Wrap the actions that change data so each success sends an alert afterwards (outside the lock). */
+['checkOut', 'book', 'cancelBooking', 'checkIn', 'addPayment', 'addCharge', 'save', 'remove', 'workshop'].forEach(function (k) {
+  var fn = ACTIONS[k];
+  ACTIONS[k] = function (p, user, token) {
+    var before = null;
+    try {
+      if (k === 'remove') before = getRow_(p.table, p.id);
+      if (k === 'save' && SCHEMA[p.table]) { var key = SCHEMA[p.table][0]; before = p.record && p.record[key] ? getRow_(p.table, p.record[key]) : null; }
+    } catch (e) { before = null; }
+    var r = fn(p, user, token);
+    try { tgAfter_(k, p, user, r, before); } catch (e) { console.error('Telegram alert', e); }
+    return r;
+  };
+});
+
+/* ----- Settings, connecting and choices ----- */
+function tgStatus_(user) {
+  var me = partnerRow_(user.partner) || {}, bot = tgProp_('TG_BOT');
+  var out = { botSet: !!tgProp_('TG_TOKEN'), bot: bot, morning: !!tgProp_('TG_MORNING'),
+    me: { connected: !!String(me['Telegram Chat ID'] || '').replace(/^'/, ''), alerts: me['Telegram Alerts'] || 'All', own: me['Telegram Own'] === true } };
+  if (user.role === 'Admin') out.partners = readTable_('Partners').filter(function (r) { return r['Active'] !== false; }).map(function (r) { return { partner: r['Partner'], connected: !!String(r['Telegram Chat ID'] || '').replace(/^'/, ''), alerts: r['Telegram Alerts'] || 'All' }; });
+  return out;
+}
+function tgSaveBot_(p, user) {
+  requireAdmin_(user);
+  var token = String(p.token || '').trim();
+  if (!/^\d{6,12}:[A-Za-z0-9_-]{30,}$/.test(token)) throw new Error('That does not look like a bot token. Copy the whole line BotFather sent, like 123456789:AA…');
+  var old = tgProp_('TG_TOKEN');
+  tgProp_('TG_TOKEN', token);
+  try { var meBot = tgApi_('getMe', {}); tgProp_('TG_BOT', meBot.username); tgProp_('TG_OFFSET', null); }
+  catch (e) { if (old) tgProp_('TG_TOKEN', old); else tgProp_('TG_TOKEN', null); throw new Error('Telegram did not accept that token. Check you copied all of it.'); }
+  log_(user, 'Set up Telegram alerts', '@' + tgProp_('TG_BOT'));
+  return tgStatus_(user);
+}
+function tgLink_(user) {
+  if (!tgProp_('TG_TOKEN')) throw new Error('The admin needs to set up the Telegram bot first.');
+  var code = Utilities.getUuid().replace(/-/g, '').slice(0, 10);
+  CacheService.getScriptCache().put('tg_' + code, String(user.partner), 1800);
+  return { code: code, url: 'https://t.me/' + tgProp_('TG_BOT') + '?start=' + code };
+}
+/** After the partner taps Start in Telegram, find their chat and save it. */
+function tgConfirm_(p, user) {
+  var lock = LockService.getScriptLock(); lock.waitLock(20000);
+  try {
+    var offset = num_(tgProp_('TG_OFFSET')), found = null, cache = CacheService.getScriptCache();
+    var ups = tgApi_('getUpdates', { offset: offset ? offset + 1 : 0, timeout: 0, allowed_updates: ['message'] }) || [];
+    ups.forEach(function (u) {
+      offset = Math.max(offset, u.update_id);
+      var m = u.message; if (!m || !m.text) return;
+      var mm = String(m.text).match(/^\/start\s+([a-f0-9]{10})$/);
+      if (!mm) return;
+      var who = cache.get('tg_' + mm[1]);
+      if (!who) return;
+      var row = partnerRow_(who);
+      if (row) { updateRow_('Partners', row['Partner'], { 'Telegram Chat ID': String(m.chat.id), 'Telegram Alerts': row['Telegram Alerts'] || 'All' }); cache.remove('tg_' + mm[1]); }
+      if (String(who).toUpperCase() === String(user.partner).toUpperCase()) found = String(m.chat.id);
+      tgSendMany_([String(m.chat.id)], '👋 Hello ' + h_(cap_(who)) + '! This chat will now get alerts from <b>' + h_(settings_()['Business Name'] || APP_NAME) + '</b>. You can change what you get in the app: Partners → Telegram alerts.');
+    });
+    if (ups.length) tgProp_('TG_OFFSET', String(offset));
+    if (!found && !String((partnerRow_(user.partner) || {})['Telegram Chat ID'] || '').replace(/^'/, '')) throw new Error('Telegram has not received your Start yet. Open the bot, tap Start, then come back and tap "I tapped Start".');
+    if (found) log_(user, 'Connected Telegram', '');
+    return tgStatus_(user);
+  } finally { lock.releaseLock(); }
+}
+function tgPrefs_(p, user) {
+  var row = partnerRow_(user.partner); if (!row) throw new Error('Partner not found.');
+  if (TG_ALERTS.indexOf(p.alerts) === -1) throw new Error('Choose what to receive.');
+  updateRow_('Partners', row['Partner'], { 'Telegram Alerts': p.alerts, 'Telegram Own': p.own === true });
+  return tgStatus_(user);
+}
+function tgDisconnect_(p, user) {
+  var name = p.partner && user.role === 'Admin' ? p.partner : user.partner, row = partnerRow_(name);
+  if (row) updateRow_('Partners', row['Partner'], { 'Telegram Chat ID': '' });
+  return tgStatus_(user);
+}
+function tgTest_(user) {
+  var row = partnerRow_(user.partner) || {}, id = String(row['Telegram Chat ID'] || '').replace(/^'/, '');
+  if (!id) throw new Error('Connect your Telegram first.');
+  if (!tgSendMany_([id], '✅ Test message from <b>' + h_(settings_()['Business Name'] || APP_NAME) + '</b>. Alerts are working.')) throw new Error('Telegram did not deliver the message. Open the bot and tap Start again.');
+  return true;
+}
+
+/* ----- Morning summary (time trigger, every day at 8:00) ----- */
+function installMorningTrigger_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === 'morningSummary') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('morningSummary').timeBased().atHour(8).nearMinute(0).everyDays(1).inTimezone(tz_()).create();
+  tgProp_('TG_MORNING', '1');
+}
+function morningSummary() {
+  if (!tgProp_('TG_TOKEN')) return;
+  var to = tgPartners_().filter(function (r) { return (r['Telegram Alerts'] || 'All') !== 'Off'; }).map(function (r) { return String(r['Telegram Chat ID']).replace(/^'/, ''); });
+  if (!to.length) return;
+  tgSendMany_(to, morningText_());
+}
+function morningText_() {
+  var now = new Date(), today = Utilities.formatDate(now, tz_(), 'yyyy-MM-dd'), nowIso = nowIso_(), st = settings_();
+  var warn = num_(st['Expiry Warning Days'] || 30), trips = readTable_('Trips'), lines = [];
+  var add = function (title, items) { if (items.length) lines.push('<b>' + title + '</b>\n' + items.map(function (s) { return '• ' + s; }).join('\n')); };
+  var out = trips.filter(function (t) { return t['Status'] === 'Out'; });
+  add('🚗 On trip (' + out.length + ')', out.map(function (t) {
+    var late = t['Expected Return'] && String(t['Expected Return']) < nowIso;
+    return h_(carName_(t['Vehicle ID'])) + ' · ' + h_(t['Customer Name']) + (t['Expected Return'] ? (late ? ' · <b>late, was due ' + dmy_(t['Expected Return']) + '</b>' : String(t['Expected Return']).slice(0, 10) === today ? ' · <b>back today ' + String(t['Expected Return']).slice(11, 16) + '</b>' : ' · back ' + dmy_(t['Expected Return'])) : '');
+  }));
+  add('📅 Pickups today', trips.filter(function (t) { return t['Status'] === 'Booked' && String(t['Out At']).slice(0, 10) === today; }).map(function (t) { return String(t['Out At']).slice(11, 16) + ' · ' + h_(t['Customer Name']) + ' · ' + h_(carName_(t['Vehicle ID'])); }));
+  add('⚠️ Bookings not started', trips.filter(function (t) { return t['Status'] === 'Booked' && String(t['Out At']).slice(0, 10) < today; }).map(function (t) { return h_(t['Customer Name']) + ' · was ' + dmy_(t['Out At']); }));
+  add('💰 Money due', trips.filter(function (t) { return t['Status'] === 'Returned' && num_(t['Balance']) > 0; }).map(function (t) { return inr_(t['Balance']) + ' · ' + h_(t['Customer Name']) + ' (since ' + dmy_(t['In At'], false) + ')'; }));
+  add('📞 Follow up today', readTable_('Enquiries').filter(function (e) { return e['Status'] !== 'Booked' && e['Status'] !== 'Lost' && e['Follow Up'] && String(e['Follow Up']).slice(0, 10) <= today; }).map(function (e) { return h_(e['Name']) + (e['Mobile'] ? ' ' + h_(e['Mobile']) : ''); }));
+  add('🔧 In workshop', readTable_('Vehicles').filter(function (v) { return v['Status'] === 'Workshop'; }).map(function (v) { return h_(v['Name']) + (v['Workshop Until'] ? ' · back ' + dmy_(v['Workshop Until'], false) : ''); }));
+  var odo = {}; trips.forEach(function (t) { var id = t['Vehicle ID']; odo[id] = Math.max(odo[id] || 0, num_(t['End Odometer']), num_(t['Start Odometer'])); });
+  var soon = Utilities.formatDate(new Date(now.getTime() + warn * 864e5), tz_(), 'yyyy-MM-dd');
+  add('📄 Papers and service', readTable_('Documents').filter(function (d) {
+    var ex = String(d['Expiry Date'] || '').slice(0, 10), km = num_(d['Due Odometer']);
+    return (ex && ex <= soon) || (km && km - (odo[d['Vehicle ID']] || 0) <= 500);
+  }).map(function (d) {
+    var ex = String(d['Expiry Date'] || '').slice(0, 10), km = num_(d['Due Odometer']);
+    return h_(d['Item']) + ' · ' + h_(carName_(d['Vehicle ID'])) + (ex ? (ex < today ? ' · <b>expired ' + dmy_(ex, false) + '</b>' : ' · ' + dmy_(ex, false)) : '') + (km ? ' · at ' + inr_(km).replace('₹', '') + ' km' : '');
+  }));
+  var head = '☀️ <b>' + h_(st['Business Name'] || APP_NAME) + '</b> · ' + Utilities.formatDate(now, tz_(), 'EEE dd/MM/yyyy');
+  return head + '\n\n' + (lines.length ? lines.join('\n\n') : '✅ Nothing due today. All cars are in order.');
+}
+
+ACTIONS.tgStatus = function (p, user) { return tgStatus_(user); };
+ACTIONS.tgSaveBot = function (p, user) { return tgSaveBot_(p, user); };
+ACTIONS.tgLink = function (p, user) { return tgLink_(user); };
+ACTIONS.tgConfirm = function (p, user) { return tgConfirm_(p, user); };
+ACTIONS.tgPrefs = function (p, user) { return tgPrefs_(p, user); };
+ACTIONS.tgDisconnect = function (p, user) { return tgDisconnect_(p, user); };
+ACTIONS.tgTest = function (p, user) { return tgTest_(user); };
+ACTIONS.tgMorningPreview = function (p, user) { requireAdmin_(user); return morningText_(); };
+ACTIONS.tgMorningSend = function (p, user) { requireAdmin_(user); morningSummary(); return true; };
