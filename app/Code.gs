@@ -680,15 +680,18 @@ function saveGithubToken_(token) {
 
 /** One file from the app/ folder of the private repository. */
 function ghFile_(name) {
+  // A public repository needs no token. A private one needs a read-only token in Script Properties.
   var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
-  if (!token) updErr_('UPD_TOKEN', 'Save the GitHub token first (App updates card).');
+  var headers = { Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' };
+  if (token) headers.Authorization = 'Bearer ' + token;
   var url = 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/app/' + encodeURIComponent(name) + '?ref=' + GITHUB_BRANCH + '&t=' + Date.now();
   var r;
   try {
-    r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, muteHttpExceptions: true });
+    r = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
   } catch (e) { updErr_('UPD_GITHUB', 'GitHub could not be reached. Check the internet and try again.'); }
   var c = r.getResponseCode();
   if (c === 401) updErr_('UPD_TOKEN', 'GitHub refused the token. It may have expired: make a new one and save it again.');
+  if ((c === 403 || c === 404) && !token) updErr_('UPD_TOKEN', 'GitHub would not share ' + name + '. If the repository is private, add a read-only GitHub token in the App updates card.');
   if (c === 403 || c === 404) updErr_('UPD_TOKEN', 'The token cannot read ' + name + ' in ' + GITHUB_REPO + '. Check it has Contents: Read-only for this repository.');
   if (c !== 200) updErr_('UPD_GITHUB', 'GitHub answered with code ' + c + '. Try again in a minute.');
   return r.getContentText();
@@ -703,7 +706,7 @@ function cmpVer_(a, b) {
 function checkUpdate_() {
   var v;
   try { v = JSON.parse(ghFile_('version.json')); } catch (e) { if (e.code) throw e; updErr_('UPD_FILES', 'version.json on GitHub is not valid.'); }
-  return { current: APP_VERSION, latest: String(v.version), notes: String(v.notes || ''), newer: cmpVer_(v.version, APP_VERSION) > 0, hasToken: true };
+  return { current: APP_VERSION, latest: String(v.version), notes: String(v.notes || ''), newer: cmpVer_(v.version, APP_VERSION) > 0, hasToken: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN') };
 }
 
 function applyUpdate_(user) {

@@ -24,7 +24,7 @@ This repository holds only the app's code. Customer details, trips, money, photo
 
 The app checks the files from GitHub, refuses anything incomplete, replaces its own code, creates a new version and moves the existing deployment to it, so the link above never changes. If a change ever needs a new permission, `appsscript.json` must be updated by hand and `setup` run once.
 
-The app reads this private repository with a read-only GitHub token saved in the app (Script Properties), never in the code.
+While this repository is public the app reads it without a token. If it is made private, add a read-only GitHub token in the app (Partners → App updates → Add GitHub token); it is kept in Script Properties, never in the code.
 
 ## Full screen on Android
 
