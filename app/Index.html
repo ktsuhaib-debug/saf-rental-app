@@ -1040,10 +1040,9 @@ function viewPartners() {
 
   h += statementCard();
   h += telegramCard();
-  h += updatesCard();
   h += '<section class="card"><div class="card-head"><h3>Team and settings</h3>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="settings">Settings</button>' : '') + '</div><div class="list">' +
     T('Partners').map(function (p) { return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.Partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.Partner)) + (p.Partner === USER.partner ? ' <span class="pill neutral">You</span>' : '') + '</div><div class="sub">' + esc(p.Role || 'Partner') + (p.Active === false ? ' · no access' : '') + ' · ' + (p.hasPin === false ? '<b style="color:var(--warn)">no PIN yet</b>' : 'PIN set') + (p.hasTelegram ? ' · Telegram' : '') + '</div></div>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="partner" data-id="' + esc(p.Partner) + '">Edit</button>' : '') + '</div>'; }).join('') +
-    '</div><div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" data-act="form" data-form="pin">Change my PIN</button><button class="btn ghost sm" data-act="logout">Sign out</button></div>' + (USER.role === 'Admin' ? '<div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" data-act="form" data-form="partner">Add partner</button><button class="btn ghost sm" data-act="form" data-form="investment">Add investment</button></div>' : '') + '</section>';
+    '</div><div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" data-act="form" data-form="pin">Change my PIN</button><button class="btn ghost sm" data-act="logout">Sign out</button></div>' + (USER.role === 'Admin' ? '<div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" data-act="form" data-form="partner">Add partner</button><button class="btn ghost sm" data-act="form" data-form="investment">Add investment</button></div>' : '') + (DB.appVersion ? '<p class="small muted" style="margin:12px 0 0">App version ' + esc(DB.appVersion) + '</p>' : '') + '</section>';
   return h;
 }
 
@@ -1894,44 +1893,6 @@ function tgAct(act, el) {
   pr.catch(function (e) { toast(e.message, true); }).then(function () { TG.busy = ''; render(); });
 }
 
-/* ---------- App updates (admin only) ---------- */
-// One-tap updates need the Apps Script API, which Google keeps off in this project's hidden Cloud project.
-// Set to true if the project is ever moved to a Cloud project with the API enabled.
-var SELF_UPDATE = false;
-var UPD = { loaded: false, loading: false, hasToken: false, editToken: false, busy: '', res: null, done: '' };
-function updatesCard() {
-  if (!isAdmin()) return '';
-  if (!UPD.loaded && !UPD.loading) { UPD.loading = true; serverCall('updateStatus', {}).then(function (r) { UPD.hasToken = !!r.hasToken; }).catch(function () {}).then(function () { UPD.loaded = true; UPD.loading = false; if (S.view === 'partners' && !document.querySelector('.scrim')) render(); }); }
-  var h = '<section class="card"><div class="card-head"><h3>App updates</h3><span class="small muted">Admin only</span></div>';
-  h += '<div class="kv">' + kvc('Installed version', esc(DB.appVersion || '—')) + kvc('GitHub token', !UPD.loaded ? '…' : UPD.hasToken ? 'Saved' : 'Not needed (public)') + '</div>';
-  if (UPD.loaded && UPD.editToken) {
-    h += '<div class="fields" style="margin-top:12px"><div class="field full"><label for="ghToken">GitHub token</label><input id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…"></div></div>' +
-      '<p class="small muted" style="margin:6px 0 0">Only needed if the saf-rental-app repository is private. A read-only token, kept in the app\'s private settings, never in the code.</p>' +
-      '<div class="btn-row" style="margin-top:10px"><button class="btn primary sm" type="button" data-act="updToken"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'token' ? 'Checking…' : 'Save token') + '</button>' + '<button class="btn ghost sm" type="button" data-act="updTokenCancel">Cancel</button>' + '</div>';
-  } else if (UPD.loaded) {
-    if (UPD.done) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>Updated to ' + esc(UPD.done) + '</b><span class="small">Close the app fully and open it again.</span></span></div>';
-    else if (UPD.res && !UPD.res.newer) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>You have the latest version</b></span></div>';
-    else if (UPD.res && UPD.res.newer) h += '<div class="alert warn" style="margin-top:12px"><span>' + icon('in') + '</span><span><b>New version ' + esc(UPD.res.latest) + ' is ready</b><span class="small">' + esc(UPD.res.notes || '') + '</span></span></div>' +
-      (SELF_UPDATE ? '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel"' + (UPD.busy ? ' disabled' : '') + '>Cancel</button><button class="btn primary sm" type="button" data-act="updApply"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'apply' ? 'Updating…' : 'Update now') + '</button></div>' +
-      (UPD.busy === 'apply' ? '<p class="small muted" style="margin:8px 0 0">This takes about half a minute. Keep the app open.</p>' : '')
-      : '<p class="small muted" style="margin:8px 0 0">To install it, paste the new Code.gs and Index.html into Apps Script, then Deploy → Manage deployments → New version.</p><div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel">OK</button></div>');
-    if (!(UPD.res && UPD.res.newer) && !UPD.done) h += '<div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" type="button" data-act="updCheck"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'check' ? 'Checking…' : 'Check for updates') + '</button><button class="btn ghost sm" type="button" data-act="updTokenEdit">' + (UPD.hasToken ? 'Change GitHub token' : 'Add GitHub token') + '</button></div>';
-  }
-  return h + '</section>';
-}
-function updAct(act) {
-  if (act === 'updTokenEdit') { UPD.editToken = true; return render(); }
-  if (act === 'updTokenCancel') { UPD.editToken = false; return render(); }
-  if (act === 'updCancel') { UPD.res = null; return render(); }
-  var name = { updToken: 'token', updCheck: 'check', updApply: 'apply' }[act]; if (!name || UPD.busy) return;
-  var pr;
-  if (act === 'updToken') { var tk = val('ghToken'); if (!tk) return toast('Paste the GitHub token first.', true); pr = serverCall('saveGithubToken', { token: tk }).then(function (r) { UPD.hasToken = !!r.hasToken; UPD.editToken = false; toast('GitHub connected'); }); }
-  if (act === 'updCheck') pr = serverCall('checkUpdate', {}).then(function (r) { UPD.res = r; UPD.done = ''; });
-  if (act === 'updApply') pr = serverCall('applyUpdate', {}).then(function (r) { UPD.done = r.version; UPD.res = null; });
-  UPD.busy = name; render();
-  pr.catch(function (e) { toast(e.message, true); }).then(function () { UPD.busy = ''; render(); });
-}
-
 function statementCard() {
   var months = {}; ['Payments', 'Expenses'].forEach(function (k) { T(k).forEach(function (x) { if (x.Date) months[monthKey(x.Date)] = 1; }); });
   months[isoDate(new Date()).slice(0, 7)] = 1;
@@ -2091,7 +2052,6 @@ document.addEventListener('click', function (ev) {
   else if (act === 'agreement') { var ls = M.lastSig; closeSheet(); M.lastSig = ls; openAgreement(id); }
   else if (act === 'statement') { var mk = id || val('stMonth'); closeSheet(); openStatement(mk); }
   else if (act === 'sharePdf') sharePdf();
-  else if (/^upd/.test(act)) updAct(act);
   else if (/^tg/.test(act) && act !== 'tgPrefs') tgAct(act, el);
   else if (act === 'rate') { closeSheet(); openRate(id); }
   else if (act === 'enqBook' || act === 'enqCheckout') enquiryToBooking(id, act === 'enqCheckout');
@@ -2317,10 +2277,6 @@ var Mock = (function () {
     tgDisconnect: function () { var s = this.tgStatus(); s.me.connected = false; s.partners[0].connected = false; return s; },
     tgTest: function () { return true; }, tgMorningSend: function () { return true; },
     tgSaveBot: function () { return this.tgStatus(); },
-    updateStatus: function () { return { current: 'preview', hasToken: true }; },
-    saveGithubToken: function () { return { hasToken: true }; },
-    checkUpdate: function () { return { current: 'preview', latest: '2026-10-19.1', notes: 'Preview only. Updates run in the real app.', newer: false }; },
-    applyUpdate: function () { throw new Error('Updates run only in the real app.'); },
     workshop: function (p) {
       var v = veh(p.vehicleId); if (!v['Vehicle ID']) throw new Error('Choose a car.');
       if (p.on) {

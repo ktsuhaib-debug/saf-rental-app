@@ -12,9 +12,9 @@ This repository holds only the app's code. Customer details, trips, money, photo
 
 | File | What it is |
 |---|---|
-| `app/Code.gs` | Server side: sheet reads and writes, PIN sign-in, partner permissions, photos, PDFs, self-update |
+| `app/Code.gs` | Server side: sheet reads and writes, PIN sign-in, partner permissions, photos, PDFs, Telegram alerts |
 | `app/Index.html` | The app itself: every screen, form, the English/Malayalam switch, and the preview with sample data |
-| `app/version.json` | The version number, a short note, and which files the app updates |
+| `app/version.json` | The version number and a short note about what changed |
 | `app/appsscript.json` | Reference copy of the Apps Script manifest (permissions and web app settings). The updater never changes it. |
 
 ## Updating the app
@@ -22,9 +22,9 @@ This repository holds only the app's code. Customer details, trips, money, photo
 1. Change `app/Code.gs` / `app/Index.html` and set the **same** version in `APP_VERSION` (top of `Code.gs`) and `app/version.json`. Push to `main`.
 2. In Apps Script, paste the new `Code.gs` and `Index.html`, save, then **Deploy → Manage deployments → ✏️ → New version → Deploy**. The link never changes.
 
-The app's **Partners → App updates** card shows the installed version and says when a newer one is on GitHub.
+The installed version is shown at the bottom of **Partners → Team and settings**.
 
-One-tap updates (`applyUpdate_` in Code.gs, `SELF_UPDATE` in Index.html) are built in but switched off: they need the Apps Script API, which Google keeps disabled in this project's hidden default Cloud project. They can be switched on if the script is moved to a standard Cloud project with the Apps Script API enabled.
+One-tap updates from GitHub were tried and removed: they need the Apps Script API, which Google keeps disabled in this project's hidden default Cloud project (moving to a standard Cloud project asked for payment verification). The code is in the git history (commit 0be4724) if it is ever wanted again.
 
 ## Full screen on Android
 
