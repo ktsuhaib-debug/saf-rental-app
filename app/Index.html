@@ -1895,6 +1895,9 @@ function tgAct(act, el) {
 }
 
 /* ---------- App updates (admin only) ---------- */
+// One-tap updates need the Apps Script API, which Google keeps off in this project's hidden Cloud project.
+// Set to true if the project is ever moved to a Cloud project with the API enabled.
+var SELF_UPDATE = false;
 var UPD = { loaded: false, loading: false, hasToken: false, editToken: false, busy: '', res: null, done: '' };
 function updatesCard() {
   if (!isAdmin()) return '';
@@ -1909,8 +1912,9 @@ function updatesCard() {
     if (UPD.done) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>Updated to ' + esc(UPD.done) + '</b><span class="small">Close the app fully and open it again.</span></span></div>';
     else if (UPD.res && !UPD.res.newer) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>You have the latest version</b></span></div>';
     else if (UPD.res && UPD.res.newer) h += '<div class="alert warn" style="margin-top:12px"><span>' + icon('in') + '</span><span><b>New version ' + esc(UPD.res.latest) + ' is ready</b><span class="small">' + esc(UPD.res.notes || '') + '</span></span></div>' +
-      '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel"' + (UPD.busy ? ' disabled' : '') + '>Cancel</button><button class="btn primary sm" type="button" data-act="updApply"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'apply' ? 'Updating…' : 'Update now') + '</button></div>' +
-      (UPD.busy === 'apply' ? '<p class="small muted" style="margin:8px 0 0">This takes about half a minute. Keep the app open.</p>' : '');
+      (SELF_UPDATE ? '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel"' + (UPD.busy ? ' disabled' : '') + '>Cancel</button><button class="btn primary sm" type="button" data-act="updApply"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'apply' ? 'Updating…' : 'Update now') + '</button></div>' +
+      (UPD.busy === 'apply' ? '<p class="small muted" style="margin:8px 0 0">This takes about half a minute. Keep the app open.</p>' : '')
+      : '<p class="small muted" style="margin:8px 0 0">To install it, paste the new Code.gs and Index.html into Apps Script, then Deploy → Manage deployments → New version.</p><div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel">OK</button></div>');
     if (!(UPD.res && UPD.res.newer) && !UPD.done) h += '<div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" type="button" data-act="updCheck"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'check' ? 'Checking…' : 'Check for updates') + '</button><button class="btn ghost sm" type="button" data-act="updTokenEdit">' + (UPD.hasToken ? 'Change GitHub token' : 'Add GitHub token') + '</button></div>';
   }
   return h + '</section>';
@@ -2522,7 +2526,7 @@ var ML = {
   'GitHub token': 'GitHub ടോക്കൺ', "A read-only token for the saf-rental-app repository. It is kept in the app's private settings, never in the code.": 'saf-rental-app-നുള്ള വായിക്കാൻ മാത്രമുള്ള ടോക്കൺ. ഇത് ആപ്പിന്റെ സ്വകാര്യ സെറ്റിങ്സിൽ സൂക്ഷിക്കും, കോഡിൽ ഇല്ല.',
   'Save token': 'ടോക്കൺ സേവ് ചെയ്യുക', 'Saved': 'സേവ് ചെയ്തു', 'Not needed (public)': 'ആവശ്യമില്ല (പബ്ലിക്)', 'Add GitHub token': 'GitHub ടോക്കൺ ചേർക്കുക',
   "Only needed if the saf-rental-app repository is private. A read-only token, kept in the app's private settings, never in the code.": 'saf-rental-app പ്രൈവറ്റ് ആണെങ്കിൽ മാത്രം വേണം. വായിക്കാൻ മാത്രമുള്ള ടോക്കൺ, ആപ്പിന്റെ സ്വകാര്യ സെറ്റിങ്സിൽ സൂക്ഷിക്കും, കോഡിൽ ഇല്ല.', 'Checking…': 'പരിശോധിക്കുന്നു…', 'Close the app fully and open it again.': 'ആപ്പ് പൂർണമായി അടച്ച് വീണ്ടും തുറക്കുക.', 'You have the latest version': 'ഏറ്റവും പുതിയ വേർഷൻ തന്നെയാണ്',
-  'Update now': 'ഇപ്പോൾ അപ്ഡേറ്റ് ചെയ്യുക', 'Updating…': 'അപ്ഡേറ്റ് ചെയ്യുന്നു…', 'This takes about half a minute. Keep the app open.': 'ഏകദേശം അര മിനിറ്റ് എടുക്കും. ആപ്പ് തുറന്നു വെക്കുക.',
+  'Update now': 'ഇപ്പോൾ അപ്ഡേറ്റ് ചെയ്യുക', 'To install it, paste the new Code.gs and Index.html into Apps Script, then Deploy → Manage deployments → New version.': 'ഇൻസ്റ്റാൾ ചെയ്യാൻ പുതിയ Code.gs, Index.html എന്നിവ Apps Script-ൽ പേസ്റ്റ് ചെയ്ത് Deploy → Manage deployments → New version ചെയ്യുക.', 'Updating…': 'അപ്ഡേറ്റ് ചെയ്യുന്നു…', 'This takes about half a minute. Keep the app open.': 'ഏകദേശം അര മിനിറ്റ് എടുക്കും. ആപ്പ് തുറന്നു വെക്കുക.',
   'Check for updates': 'അപ്ഡേറ്റ് ഉണ്ടോ എന്ന് നോക്കുക', 'Change GitHub token': 'GitHub ടോക്കൺ മാറ്റുക', 'Paste the GitHub token first.': 'ആദ്യം GitHub ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'GitHub connected': 'GitHub കണക്റ്റ് ചെയ്തു', 'Updated the app': 'ആപ്പ് അപ്ഡേറ്റ് ചെയ്തു',
   'Telegram alerts': 'ടെലിഗ്രാം അലേർട്ടുകൾ', 'Loading…': 'ലോഡ് ചെയ്യുന്നു…', 'Get a message on Telegram whenever something is entered in the app. Ask': 'ആപ്പിൽ എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ് വരും. ബോട്ട് സെറ്റ് ചെയ്യാൻ',
   'to set up the bot first.': '-നോട് പറയുക.', 'Get a Telegram message whenever someone enters something in the app. First create the bot (once):': 'ആപ്പിൽ ആരെങ്കിലും എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ് വരും. ആദ്യം ബോട്ട് ഉണ്ടാക്കുക (ഒരിക്കൽ മാത്രം):',

@@ -17,14 +17,14 @@ This repository holds only the app's code. Customer details, trips, money, photo
 | `app/version.json` | The version number, a short note, and which files the app updates |
 | `app/appsscript.json` | Reference copy of the Apps Script manifest (permissions and web app settings). The updater never changes it. |
 
-## Updating the app (one tap)
+## Updating the app
 
 1. Change `app/Code.gs` / `app/Index.html` and set the **same** version in `APP_VERSION` (top of `Code.gs`) and `app/version.json`. Push to `main`.
-2. In the app, the admin opens **Partners → App updates → Check for updates → Update now**.
+2. In Apps Script, paste the new `Code.gs` and `Index.html`, save, then **Deploy → Manage deployments → ✏️ → New version → Deploy**. The link never changes.
 
-The app checks the files from GitHub, refuses anything incomplete, replaces its own code, creates a new version and moves the existing deployment to it, so the link above never changes. If a change ever needs a new permission, `appsscript.json` must be updated by hand and `setup` run once.
+The app's **Partners → App updates** card shows the installed version and says when a newer one is on GitHub.
 
-While this repository is public the app reads it without a token. If it is made private, add a read-only GitHub token in the app (Partners → App updates → Add GitHub token); it is kept in Script Properties, never in the code.
+One-tap updates (`applyUpdate_` in Code.gs, `SELF_UPDATE` in Index.html) are built in but switched off: they need the Apps Script API, which Google keeps disabled in this project's hidden default Cloud project. They can be switched on if the script is moved to a standard Cloud project with the Apps Script API enabled.
 
 ## Full screen on Android
 
