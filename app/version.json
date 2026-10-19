@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-19.1",
-  "notes": "One-tap app updates from GitHub, full-screen Android launcher support, rental agreements, monthly statements and customer ratings.",
+  "version": "2026-10-19.2",
+  "notes": "Updates now read the public files directly, so they work without a GitHub token.",
   "files": ["Code.gs", "Index.html"]
 }

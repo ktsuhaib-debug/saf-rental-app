@@ -13,7 +13,7 @@ var APP_NAME = 'Rental Hub';
 
 // One-tap updates: the app pulls new code from GitHub and moves its own deployment to it.
 // APP_VERSION must match app/version.json in the repository.
-var APP_VERSION = '2026-10-19.1';
+var APP_VERSION = '2026-10-19.2';
 var GITHUB_REPO = 'ktsuhaib-debug/saf-rental-app';
 var GITHUB_BRANCH = 'main';
 var DEPLOYMENT_ID = 'AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ2GjO49JhZTLByxQ';
@@ -681,16 +681,20 @@ function saveGithubToken_(token) {
 /** One file from the app/ folder of the private repository. */
 function ghFile_(name) {
   // A public repository needs no token. A private one needs a read-only token in Script Properties.
+  // Without a token, read the public file directly (GitHub's API limits anonymous calls from Google's shared servers).
   var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
-  var headers = { Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' };
-  if (token) headers.Authorization = 'Bearer ' + token;
-  var url = 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/app/' + encodeURIComponent(name) + '?ref=' + GITHUB_BRANCH + '&t=' + Date.now();
+  var url = token
+    ? 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/app/' + encodeURIComponent(name) + '?ref=' + GITHUB_BRANCH + '&t=' + Date.now()
+    : 'https://raw.githubusercontent.com/' + GITHUB_REPO + '/' + GITHUB_BRANCH + '/app/' + encodeURIComponent(name) + '?t=' + Date.now();
+  var opt = { muteHttpExceptions: true };
+  if (token) opt.headers = { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' };
   var r;
   try {
-    r = UrlFetchApp.fetch(url, { headers: headers, muteHttpExceptions: true });
+    r = UrlFetchApp.fetch(url, opt);
   } catch (e) { updErr_('UPD_GITHUB', 'GitHub could not be reached. Check the internet and try again.'); }
   var c = r.getResponseCode();
   if (c === 401) updErr_('UPD_TOKEN', 'GitHub refused the token. It may have expired: make a new one and save it again.');
+  if (c === 429 || (c === 403 && /rate limit/i.test(r.getContentText()))) updErr_('UPD_GITHUB', 'GitHub is busy right now. Try again in a few minutes.');
   if ((c === 403 || c === 404) && !token) updErr_('UPD_TOKEN', 'GitHub would not share ' + name + '. If the repository is private, add a read-only GitHub token in the App updates card.');
   if (c === 403 || c === 404) updErr_('UPD_TOKEN', 'The token cannot read ' + name + ' in ' + GITHUB_REPO + '. Check it has Contents: Read-only for this repository.');
   if (c !== 200) updErr_('UPD_GITHUB', 'GitHub answered with code ' + c + '. Try again in a minute.');
