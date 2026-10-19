@@ -13,7 +13,7 @@ var APP_NAME = 'Rental Hub';
 
 // One-tap updates: the app pulls new code from GitHub and moves its own deployment to it.
 // APP_VERSION must match app/version.json in the repository.
-var APP_VERSION = '2026-10-19.3';
+var APP_VERSION = '2026-10-19.4';
 var GITHUB_REPO = 'ktsuhaib-debug/saf-rental-app';
 var GITHUB_BRANCH = 'main';
 var DEPLOYMENT_ID = 'AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ2GjO49JhZTLByxQ';
@@ -117,8 +117,7 @@ function setup() {
   photoFolder_();
   ensureLogo_();
   formatDateColumns_();
-  var morning = '';
-  try { installMorningTrigger_(); } catch (e) { morning = ' Morning summary not switched on yet: update appsscript.json (it needs the script.scriptapp permission) and run setup again.'; }
+  var morning = ''; // The morning summary is off; installMorningTrigger_() switches it on if ever wanted.
   var noPin = readTable_('Partners').filter(function (r) { return r['Active'] !== false && !String(r['PIN'] || '').trim(); }).map(function (r) { return r['Partner']; });
   return 'Setup complete.' + morning + (noPin.length ? ' Add a PIN in the Partners tab for: ' + noPin.join(', ') : ' Every partner has a PIN.');
 }
@@ -1116,7 +1115,7 @@ function importOld_(user) {
 /* ------------------------------------------------------------------ */
 /* Telegram alerts: the bot messages each partner privately            */
 /* ------------------------------------------------------------------ */
-var TG_ALERTS = ['All', 'Trips', 'Money', 'Morning summary only', 'Off'];
+var TG_ALERTS = ['All', 'Trips', 'Money', 'Off'];
 var TG_TRIPS = ['checkOut', 'book', 'cancelBooking', 'checkIn', 'workshop', 'enquiry'];
 
 function tgProp_(k, v) { var pr = PropertiesService.getScriptProperties(); if (v === undefined) return pr.getProperty(k) || ''; if (v === null) pr.deleteProperty(k); else pr.setProperty(k, v); return v; }
@@ -1161,7 +1160,7 @@ function tgRecipients_(kind, actor) {
   var isTrip = TG_TRIPS.indexOf(kind) > -1;
   return tgPartners_().filter(function (r) {
     var pref = r['Telegram Alerts'] || 'All';
-    if (pref === 'Off' || pref === 'Morning summary only') return false;
+    if (pref === 'Off') return false;
     if (pref === 'Trips' && !isTrip) return false;
     if (pref === 'Money' && isTrip) return false;
     if (String(r['Partner']).toUpperCase() === String(actor).toUpperCase() && r['Telegram Own'] !== true) return false;

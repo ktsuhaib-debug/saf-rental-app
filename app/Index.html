@@ -1837,7 +1837,7 @@ function openStatement(mk) {
 }
 /* ---------- Telegram alerts ---------- */
 var TG = { loaded: false, loading: false, st: null, link: null, linkAt: 0, busy: '', editBot: false };
-var TG_OPTS = [['All', 'Everything'], ['Trips', 'Trips only'], ['Money', 'Money only'], ['Morning summary only', 'Morning summary only'], ['Off', 'Nothing']];
+var TG_OPTS = [['All', 'Everything'], ['Trips', 'Trips only'], ['Money', 'Money only'], ['Off', 'Nothing']];
 function tgLoad(force) {
   if ((TG.loaded && !force) || TG.loading) return;
   TG.loading = true;
@@ -1855,7 +1855,7 @@ function telegramCard() {
   if (!TG.loaded || !st) return h + '<div class="small muted">Loading…</div></section>';
   if (!st.botSet || (TG.editBot && isAdmin())) {
     if (!isAdmin()) return h + '<p class="small muted" style="margin:0">Get a message on Telegram whenever something is entered in the app. Ask ' + esc(adminName()) + ' to set up the bot first.</p></section>';
-    return h + '<p class="small" style="margin:0 0 8px">Get a Telegram message whenever someone enters something, plus a summary every morning at 8:00. First create the bot (once):</p>' +
+    return h + '<p class="small" style="margin:0 0 8px">Get a Telegram message whenever someone enters something in the app. First create the bot (once):</p>' +
       '<ol class="small tg-steps"><li>In Telegram, open <a href="https://t.me/BotFather" target="_blank" rel="noopener"><b>@BotFather</b></a> and tap <b>Start</b>.</li><li>Send <b>/newbot</b>. Name it <b>SAF Rental</b>, then pick a username ending in <b>bot</b>, for example <b>saf_rental_alerts_bot</b>.</li><li>BotFather replies with a token like <b>123456789:AAF…</b>. Copy it and paste it here.</li></ol>' +
       '<div class="fields"><div class="field full"><label for="tgToken">Bot token</label><input id="tgToken" type="password" autocomplete="off" placeholder="123456789:AA…"></div></div>' +
       '<div class="btn-row" style="margin-top:10px"><button class="btn primary sm" type="button" data-act="tgSaveBot"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'bot' ? 'Checking…' : 'Save bot') + '</button>' + (st.botSet ? '<button class="btn ghost sm" type="button" data-act="tgEditBotCancel">Cancel</button>' : '') + '</div></section>';
@@ -1868,13 +1868,13 @@ function telegramCard() {
     h += '<div class="alert" style="background:var(--good-bg)"><span style="color:var(--good)">' + icon('in') + '</span><span><b>Your Telegram is connected</b></span></div>' +
       '<div class="fields" style="margin-top:10px"><div class="field full"><label for="tgAlerts">Send me</label><select id="tgAlerts" data-act="tgPrefs">' + opts(TG_OPTS, st.me.alerts) + '</select></div></div>' +
       '<label class="small" style="display:flex;gap:10px;align-items:center;font-weight:600;margin-top:10px"><input type="checkbox" id="tgOwn" data-act="tgPrefs"' + (st.me.own ? ' checked' : '') + ' style="width:20px;height:20px"> Also tell me about my own entries</label>' +
-      '<p class="small muted" style="margin:6px 0 0">Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions. Everyone except "Nothing" gets the morning summary.</p>' +
+      '<p class="small muted" style="margin:6px 0 0">Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions.</p>' +
       '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="tgTest"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'test' ? 'Sending…' : 'Send test message') + '</button><button class="btn ghost sm" type="button" data-act="tgDisconnect">Disconnect</button></div>';
   }
   if (isAdmin() && st.partners) {
     h += '<div class="eyebrow" style="margin:16px 0 4px">Partners</div><div class="list">' + st.partners.map(function (p) {
       return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.partner)) + '</div><div class="sub">' + (p.connected ? (TG_OPTS.filter(function (o) { return o[0] === p.alerts; })[0] || ['', 'Everything'])[1] : 'Not connected yet') + '</div></div>' + (p.connected ? '<span class="pill good">Connected</span>' : '<span class="pill neutral">Not connected</span>') + '</div>';
-    }).join('') + '</div><div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="tgMorning"' + (TG.busy ? ' disabled' : '') + '>' + (TG.busy === 'morning' ? 'Sending…' : 'Send morning summary now') + '</button><button class="btn ghost sm" type="button" data-act="tgEditBot">Change bot</button></div>';
+    }).join('') + '</div><div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="tgEditBot">Change bot</button></div>';
   }
   return h + '</section>';
 }
@@ -2525,12 +2525,12 @@ var ML = {
   'Update now': 'ഇപ്പോൾ അപ്ഡേറ്റ് ചെയ്യുക', 'Updating…': 'അപ്ഡേറ്റ് ചെയ്യുന്നു…', 'This takes about half a minute. Keep the app open.': 'ഏകദേശം അര മിനിറ്റ് എടുക്കും. ആപ്പ് തുറന്നു വെക്കുക.',
   'Check for updates': 'അപ്ഡേറ്റ് ഉണ്ടോ എന്ന് നോക്കുക', 'Change GitHub token': 'GitHub ടോക്കൺ മാറ്റുക', 'Paste the GitHub token first.': 'ആദ്യം GitHub ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'GitHub connected': 'GitHub കണക്റ്റ് ചെയ്തു', 'Updated the app': 'ആപ്പ് അപ്ഡേറ്റ് ചെയ്തു',
   'Telegram alerts': 'ടെലിഗ്രാം അലേർട്ടുകൾ', 'Loading…': 'ലോഡ് ചെയ്യുന്നു…', 'Get a message on Telegram whenever something is entered in the app. Ask': 'ആപ്പിൽ എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ് വരും. ബോട്ട് സെറ്റ് ചെയ്യാൻ',
-  'to set up the bot first.': '-നോട് പറയുക.', 'Get a Telegram message whenever someone enters something, plus a summary every morning at 8:00. First create the bot (once):': 'ആരെങ്കിലും എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ്, കൂടാതെ എല്ലാ ദിവസവും രാവിലെ 8:00-ന് ഒരു സംഗ്രഹം. ആദ്യം ബോട്ട് ഉണ്ടാക്കുക (ഒരിക്കൽ മാത്രം):',
+  'to set up the bot first.': '-നോട് പറയുക.', 'Get a Telegram message whenever someone enters something in the app. First create the bot (once):': 'ആപ്പിൽ ആരെങ്കിലും എന്തെങ്കിലും ചേർക്കുമ്പോൾ ടെലിഗ്രാമിൽ മെസേജ് വരും. ആദ്യം ബോട്ട് ഉണ്ടാക്കുക (ഒരിക്കൽ മാത്രം):',
   'Bot token': 'ബോട്ട് ടോക്കൺ', 'Save bot': 'ബോട്ട് സേവ് ചെയ്യുക', 'Connect your Telegram to get alerts on your phone.': 'ഫോണിൽ അലേർട്ട് കിട്ടാൻ നിങ്ങളുടെ ടെലിഗ്രാം കണക്റ്റ് ചെയ്യുക.',
   'Open the bot and tap': 'ബോട്ട് തുറന്ന്', 'Start': 'Start', 'Come back here and tap:': 'ഇവിടെ തിരികെ വന്ന് അമർത്തുക:', 'Open Telegram': 'ടെലിഗ്രാം തുറക്കുക', 'I tapped Start': 'Start അമർത്തി',
   'Your Telegram is connected': 'നിങ്ങളുടെ ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Send me': 'എനിക്ക് അയയ്ക്കേണ്ടത്', 'Everything': 'എല്ലാം', 'Trips only': 'ട്രിപ്പുകൾ മാത്രം', 'Money only': 'പണം മാത്രം', 'Morning summary only': 'രാവിലത്തെ സംഗ്രഹം മാത്രം', 'Nothing': 'ഒന്നും വേണ്ട',
   'Also tell me about my own entries': 'ഞാൻ ചേർക്കുന്നവയും അറിയിക്കുക',
-  'Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions. Everyone except "Nothing" gets the morning summary.': 'ട്രിപ്പുകൾ: ചെക്ക് ഔട്ട്, ചെക്ക് ഇൻ, ബുക്കിങ്, അന്വേഷണം, വർക്ക്ഷോപ്പ്. പണം: പേയ്മെന്റ്, ചെലവ്, ഡിവിഡന്റ്, കൈമാറ്റം, ഡിലീറ്റ്. "ഒന്നും വേണ്ട" ഒഴികെ എല്ലാവർക്കും രാവിലത്തെ സംഗ്രഹം കിട്ടും.',
+  'Trips: check-out, check-in, bookings, enquiries and workshop. Money: payments, expenses, dividends, handovers and deletions.': 'ട്രിപ്പുകൾ: ചെക്ക് ഔട്ട്, ചെക്ക് ഇൻ, ബുക്കിങ്, അന്വേഷണം, വർക്ക്ഷോപ്പ്. പണം: പേയ്മെന്റ്, ചെലവ്, ഡിവിഡന്റ്, കൈമാറ്റം, ഡിലീറ്റ്.',
   'Send test message': 'ടെസ്റ്റ് മെസേജ് അയയ്ക്കുക', 'Sending…': 'അയയ്ക്കുന്നു…', 'Disconnect': 'ഡിസ്കണക്റ്റ്', 'Not connected yet': 'ഇതുവരെ കണക്റ്റ് ചെയ്തിട്ടില്ല', 'Send morning summary now': 'രാവിലത്തെ സംഗ്രഹം ഇപ്പോൾ അയയ്ക്കുക', 'Change bot': 'ബോട്ട് മാറ്റുക',
   'Paste the bot token first.': 'ആദ്യം ബോട്ട് ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'Telegram bot saved': 'ടെലിഗ്രാം ബോട്ട് സേവ് ചെയ്തു', 'Telegram connected': 'ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Test message sent. Check Telegram.': 'ടെസ്റ്റ് മെസേജ് അയച്ചു. ടെലിഗ്രാം നോക്കുക.', 'Morning summary sent': 'രാവിലത്തെ സംഗ്രഹം അയച്ചു',
   'Connected Telegram': 'ടെലിഗ്രാം കണക്റ്റ് ചെയ്തു', 'Set up Telegram alerts': 'ടെലിഗ്രാം അലേർട്ടുകൾ സെറ്റ് ചെയ്തു',
