@@ -28,7 +28,11 @@ The app reads this private repository with a read-only GitHub token saved in the
 
 ## Full screen on Android
 
-The public repository `saf-rental` holds a small launcher page on GitHub Pages that opens this app full screen, with the SAF icon.
+The files in the top folder (`index.html`, `manifest.webmanifest`, `sw.js` and the icons) are a small launcher served by GitHub Pages. It opens the app full screen with the SAF icon:
+
+**https://ktsuhaib-debug.github.io/saf-rental-app/** → Chrome menu (⋮) → **Add to Home screen / Install app**.
+
+iPhones go straight to the app link, because iOS already opens home-screen apps full screen.
 
 ## What the app does
 

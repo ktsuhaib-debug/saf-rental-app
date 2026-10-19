@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SAF Rental</title>
+<meta name="theme-color" content="#1b2a4a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SAF Rental">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; height: 100%; background: #ffffff; overflow: hidden; }
+  iframe { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; }
+  .boot { position: fixed; inset: 0; display: grid; place-items: center; background: #ffffff; transition: opacity .3s; }
+  .boot img { width: 120px; height: 120px; }
+  .boot.gone { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<!-- The Apps Script web app link (ending in /exec). It never changes when the app is updated. -->
+<script>const APP_URL = "https://script.google.com/macros/s/AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ2GjO49JhZTLByxQ/exec";</script>
+
+<iframe id="app" title="SAF Rental" allow="clipboard-write; web-share; camera"></iframe>
+<div class="boot" id="boot"><img src="icon-512.png" alt=""></div>
+
+<script>
+  // iPhone/iPad: Safari blocks Google inside another site's frame,
+  // and iOS already opens home-screen links full screen, so just go to the app.
+  const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (iOS) location.replace(APP_URL);
+  const frame = document.getElementById('app');
+  frame.addEventListener('load', () => document.getElementById('boot').classList.add('gone'));
+  frame.src = APP_URL;
+  setTimeout(() => document.getElementById('boot').classList.add('gone'), 8000);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
