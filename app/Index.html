@@ -1984,6 +1984,7 @@ function toast(msg, err) {
 function refresh(quiet) {
   if (Q.length && DB) { render(); return Promise.resolve(); }
   var b = document.getElementById('syncBtn'); b.classList.add('spin');
+  if (typeof TG !== 'undefined') TG.loaded = false;
   return call('bootstrap').then(function (d) {
     DB = d; USER = d.user; fmtCache = null;
     prefetchPhotos();
@@ -2034,7 +2035,7 @@ document.addEventListener('click', function (ev) {
   var act = el.getAttribute('data-act'), id = el.getAttribute('data-id');
   if (act === 'scrim') { if (ev.target === el) closeSheet(); return; }
   if (['search', 'month', 'period', 'periodDate', 'wscheck', 'coVehicle', 'recalc', 'custSearch', 'billcalc', 'bkcheck', 'cocheck', 'invcalc'].indexOf(act) > -1) return;
-  if (act === 'go') { if (!DB) return; closeSheet(); S.view = el.getAttribute('data-view') || 'home'; S.search = ''; render(); window.scrollTo(0, 0); }
+  if (act === 'go') { if (!DB) return; closeSheet(); S.view = el.getAttribute('data-view') || 'home'; if (S.view === 'partners') TG.loaded = false; S.search = ''; render(); window.scrollTo(0, 0); }
   else if (act === 'lang') toggleLang();
   else if (act === 'refresh') { if (DB || getToken() || DEMO) refresh(); }
   else if (act === 'pickLogin') { loginName = el.getAttribute('data-v'); el.parentNode.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b === el)); }); var pi = document.getElementById('loginPin'); if (pi) pi.focus(); }

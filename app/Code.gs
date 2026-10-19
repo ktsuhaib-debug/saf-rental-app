@@ -12,7 +12,7 @@
 var APP_NAME = 'Rental Hub';
 
 // Shown under Partners → Team and settings. Keep it equal to app/version.json in the GitHub repository.
-var APP_VERSION = '2026-10-19.4';
+var APP_VERSION = '2026-10-19.5';
 
 /* ------------------------------------------------------------------ */
 /* Schema: every tab, its columns, and the type of each column.        */
