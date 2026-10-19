@@ -11,6 +11,13 @@
 
 var APP_NAME = 'Rental Hub';
 
+// One-tap updates: the app pulls new code from GitHub and moves its own deployment to it.
+// APP_VERSION must match app/version.json in the repository.
+var APP_VERSION = '2026-10-19.1';
+var GITHUB_REPO = 'ktsuhaib-debug/saf-rental-app';
+var GITHUB_BRANCH = 'main';
+var DEPLOYMENT_ID = 'AKfycbw4DwELqYZng48CLSiZ1qFM-d8S0UcV-7T4cddyFusD3blRddg1inJ2GjO49JhZTLByxQ';
+
 /* ------------------------------------------------------------------ */
 /* Schema: every tab, its columns, and the type of each column.        */
 /* ------------------------------------------------------------------ */
@@ -67,6 +74,8 @@ function doGet() {
   var name = APP_NAME, iconId = '';
   try { var st = settings_(); name = st['Business Name'] || APP_NAME; iconId = String(st['Logo File ID'] || '').replace(/^'/, ''); } catch (e) { /* first run */ }
   out.setTitle(name);
+  // Lets the full-screen launcher (GitHub Pages) show the app inside its page.
+  out.setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   if (iconId) { try { out.setFaviconUrl('https://drive.google.com/uc?export=view&id=' + iconId + '&format=.png'); } catch (e) { /* icon is optional */ } }
   return out;
 }
@@ -127,7 +136,7 @@ function api(action, payload, token) {
     if (!fn) throw new Error('Unknown action: ' + action);
     return JSON.stringify({ ok: true, data: fn(payload || {}, user, token) });
   } catch (err) {
-    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err) });
+    return JSON.stringify({ ok: false, error: String(err && err.message ? err.message : err), code: err && err.code ? err.code : undefined });
   }
 }
 
@@ -149,6 +158,10 @@ var ACTIONS = {
   remove: function (p, user) { return withLock_(function () { return remove_(p, user); }); },
   photos: function (p) { return photos_(p.ids || [], p.full === true); },
   // The AppSheet import was used once to move the old data across. It is switched off so it can never overwrite live data.
+  updateStatus: function (p, user) { requireAdmin_(user); return updateStatus_(); },
+  saveGithubToken: function (p, user) { requireAdmin_(user); return saveGithubToken_(p.token); },
+  checkUpdate: function (p, user) { requireAdmin_(user); return checkUpdate_(); },
+  applyUpdate: function (p, user) { requireAdmin_(user); return applyUpdate_(user); },
   importOld: function () { throw new Error('The AppSheet import is no longer available. All AppSheet data is already in this app.'); }
 };
 
@@ -434,7 +447,7 @@ function bootstrap_(user) {
   tables.Partners = tables.Partners.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { if (k !== 'PIN') o[k] = r[k]; }); o.hasPin = !!String(r['PIN'] || '').trim(); return o; });
   var act = readTable_('Activity');
   tables.Activity = act.slice(-60).reverse();
-  return { user: user, tables: tables, serverTime: nowIso_() };
+  return { user: user, tables: tables, serverTime: nowIso_(), appVersion: APP_VERSION };
 }
 
 /* ------------------------------------------------------------------ */
@@ -642,6 +655,101 @@ function addCharge_(p, user) {
   recalcTrip_(t['Trip ID']);
   log_(user, p.kind === 'Toll' ? 'Added toll' : 'Added fine', t['Customer Name'] + ' · ' + amt + (p.note ? ' · ' + p.note : ''));
   return true;
+}
+
+/* ------------------------------------------------------------------ */
+/* App updates from GitHub (admin only)                                */
+/* ------------------------------------------------------------------ */
+function updErr_(code, msg) { var e = new Error(msg); e.code = code; throw e; }
+
+function updateStatus_() {
+  return { current: APP_VERSION, hasToken: !!PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN') };
+}
+
+/** The token lives in Script Properties, never in the code (the code itself is on GitHub). */
+function saveGithubToken_(token) {
+  token = String(token || '').trim();
+  if (!/^(github_pat_|ghp_)[A-Za-z0-9_]{20,}$/.test(token)) updErr_('UPD_TOKEN', 'That does not look like a GitHub token. It starts with github_pat_.');
+  PropertiesService.getScriptProperties().setProperty('GITHUB_TOKEN', token);
+  try { ghFile_('version.json'); } catch (e) {
+    PropertiesService.getScriptProperties().deleteProperty('GITHUB_TOKEN');
+    throw e;
+  }
+  return updateStatus_();
+}
+
+/** One file from the app/ folder of the private repository. */
+function ghFile_(name) {
+  var token = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+  if (!token) updErr_('UPD_TOKEN', 'Save the GitHub token first (App updates card).');
+  var url = 'https://api.github.com/repos/' + GITHUB_REPO + '/contents/app/' + encodeURIComponent(name) + '?ref=' + GITHUB_BRANCH + '&t=' + Date.now();
+  var r;
+  try {
+    r = UrlFetchApp.fetch(url, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.raw', 'X-GitHub-Api-Version': '2022-11-28' }, muteHttpExceptions: true });
+  } catch (e) { updErr_('UPD_GITHUB', 'GitHub could not be reached. Check the internet and try again.'); }
+  var c = r.getResponseCode();
+  if (c === 401) updErr_('UPD_TOKEN', 'GitHub refused the token. It may have expired: make a new one and save it again.');
+  if (c === 403 || c === 404) updErr_('UPD_TOKEN', 'The token cannot read ' + name + ' in ' + GITHUB_REPO + '. Check it has Contents: Read-only for this repository.');
+  if (c !== 200) updErr_('UPD_GITHUB', 'GitHub answered with code ' + c + '. Try again in a minute.');
+  return r.getContentText();
+}
+
+function cmpVer_(a, b) {
+  var x = String(a).split(/[-.]/).map(Number), y = String(b).split(/[-.]/).map(Number);
+  for (var i = 0; i < Math.max(x.length, y.length); i++) { var d = (x[i] || 0) - (y[i] || 0); if (d) return d; }
+  return 0;
+}
+
+function checkUpdate_() {
+  var v;
+  try { v = JSON.parse(ghFile_('version.json')); } catch (e) { if (e.code) throw e; updErr_('UPD_FILES', 'version.json on GitHub is not valid.'); }
+  return { current: APP_VERSION, latest: String(v.version), notes: String(v.notes || ''), newer: cmpVer_(v.version, APP_VERSION) > 0, hasToken: true };
+}
+
+function applyUpdate_(user) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var v = JSON.parse(ghFile_('version.json'));
+    var names = (v.files && v.files.length ? v.files : ['Code.gs', 'Index.html']).map(String);
+    var got = names.map(function (n) { return { name: n, source: ghFile_(n) }; });
+    // Refuse anything that is not a complete copy of this app.
+    got.forEach(function (f) {
+      if (/\.gs$/.test(f.name) && f.name === 'Code.gs' && (f.source.indexOf('function doGet') < 0 || f.source.indexOf("APP_VERSION = '" + v.version + "'") < 0))
+        updErr_('UPD_FILES', 'Code.gs on GitHub is incomplete or does not match version ' + v.version + '. Nothing was changed.');
+      if (/\.html$/.test(f.name) && f.source.indexOf('</html>') < 0)
+        updErr_('UPD_FILES', f.name + ' on GitHub is incomplete. Nothing was changed.');
+    });
+    var id = ScriptApp.getScriptId(), base = 'https://script.googleapis.com/v1/projects/' + id;
+    var files = gapi_('get', base + '/content').files.map(function (f) { return { name: f.name, type: f.type, source: f.source }; });
+    got.forEach(function (g) {
+      var type = /\.html$/.test(g.name) ? 'HTML' : 'SERVER_JS', name = g.name.replace(/\.(gs|html)$/, '');
+      var f = files.filter(function (x) { return x.name === name && x.type === type; })[0];
+      if (f) f.source = g.source; else files.push({ name: name, type: type, source: g.source });
+    });
+    gapi_('put', base + '/content', { files: files });
+    var ver = gapi_('post', base + '/versions', { description: 'v' + v.version + (v.notes ? ' · ' + String(v.notes).slice(0, 80) : '') });
+    gapi_('put', base + '/deployments/' + DEPLOYMENT_ID, {
+      deploymentConfig: { scriptId: id, versionNumber: ver.versionNumber, manifestFileName: 'appsscript', description: 'v' + v.version }
+    }, true);
+    log_(user, 'Updated the app', 'v' + v.version);
+    return { version: String(v.version) };
+  } finally { lock.releaseLock(); }
+}
+
+/** Apps Script API call. Errors before the last step leave the live app on its old version. */
+function gapi_(method, url, body, isDeploy) {
+  var opt = { method: method, headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() }, muteHttpExceptions: true };
+  if (body) { opt.contentType = 'application/json'; opt.payload = JSON.stringify(body); }
+  var r = UrlFetchApp.fetch(url, opt), c = r.getResponseCode(), t = r.getContentText();
+  if (c >= 300) {
+    console.error(method, url, c, t);
+    var still = isDeploy ? '' : ' The app is still on the old version.';
+    if (/SERVICE_DISABLED|has not been used|not enabled|is disabled/i.test(t)) updErr_('UPD_API', 'The Google Apps Script API is off. Turn it on at script.google.com/home/usersettings and try again.' + still);
+    if (c === 401 || c === 403) updErr_('UPD_SCOPE', 'The app is missing a permission. Replace appsscript.json, run setup once and click Allow.' + still);
+    updErr_('UPD_OTHER', 'Google answered with code ' + c + '.' + still);
+  }
+  return t ? JSON.parse(t) : {};
 }
 
 /* ------------------------------------------------------------------ */

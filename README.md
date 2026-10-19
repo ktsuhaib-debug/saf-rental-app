@@ -12,15 +12,23 @@ This repository holds only the app's code. Customer details, trips, money, photo
 
 | File | What it is |
 |---|---|
-| `Code.gs` | Server side: sheet reads and writes, PIN sign-in, partner permissions, photos, PDFs |
-| `Index.html` | The app itself: every screen, form, the English/Malayalam switch, and the preview with sample data |
+| `app/Code.gs` | Server side: sheet reads and writes, PIN sign-in, partner permissions, photos, PDFs, self-update |
+| `app/Index.html` | The app itself: every screen, form, the English/Malayalam switch, and the preview with sample data |
+| `app/version.json` | The version number, a short note, and which files the app updates |
+| `app/appsscript.json` | Reference copy of the Apps Script manifest (permissions and web app settings). The updater never changes it. |
 
-## Putting an update live
+## Updating the app (one tap)
 
-1. Open the Rental Hub Data sheet → **Extensions → Apps Script**.
-2. Replace everything in `Code.gs` with this repository's `Code.gs`. Do the same for `Index.html`.
-3. Save, choose the `setup` function and click **Run**. This is only needed when new columns or settings were added; running it again does no harm.
-4. **Deploy → Manage deployments →** pencil icon **→ Version: New version → Deploy.** The app link stays the same.
+1. Change `app/Code.gs` / `app/Index.html` and set the **same** version in `APP_VERSION` (top of `Code.gs`) and `app/version.json`. Push to `main`.
+2. In the app, the admin opens **Partners → App updates → Check for updates → Update now**.
+
+The app checks the files from GitHub, refuses anything incomplete, replaces its own code, creates a new version and moves the existing deployment to it, so the link above never changes. If a change ever needs a new permission, `appsscript.json` must be updated by hand and `setup` run once.
+
+The app reads this private repository with a read-only GitHub token saved in the app (Script Properties), never in the code.
+
+## Full screen on Android
+
+The public repository `saf-rental` holds a small launcher page on GitHub Pages that opens this app full screen, with the SAF icon.
 
 ## What the app does
 

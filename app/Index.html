@@ -1034,6 +1034,7 @@ function viewPartners() {
     '</tbody></table></div></section>';
 
   h += statementCard();
+  h += updatesCard();
   h += '<section class="card"><div class="card-head"><h3>Team and settings</h3>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="settings">Settings</button>' : '') + '</div><div class="list">' +
     T('Partners').map(function (p) { return '<div class="row"><div class="avatar" style="flex:none">' + esc(initials(p.Partner)) + '</div><div class="main"><div class="title">' + esc(cap(p.Partner)) + (p.Partner === USER.partner ? ' <span class="pill neutral">You</span>' : '') + '</div><div class="sub">' + esc(p.Role || 'Partner') + (p.Active === false ? ' · no access' : '') + ' · ' + (p.hasPin === false ? '<b style="color:var(--warn)">no PIN yet</b>' : 'PIN set') + '</div></div>' + (USER.role === 'Admin' ? '<button class="btn ghost sm" data-act="form" data-form="partner" data-id="' + esc(p.Partner) + '">Edit</button>' : '') + '</div>'; }).join('') +
     '</div><div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" data-act="form" data-form="pin">Change my PIN</button><button class="btn ghost sm" data-act="logout">Sign out</button></div>' + (USER.role === 'Admin' ? '<div class="btn-row" style="margin-top:8px"><button class="btn ghost sm" data-act="form" data-form="partner">Add partner</button><button class="btn ghost sm" data-act="form" data-form="investment">Add investment</button></div>' : '') + '</section>';
@@ -1828,6 +1829,40 @@ function openStatement(mk) {
     pdfReady(r, html, waLink('', setting('Business Name', 'Rental Hub') + ' monthly statement for ' + label + ':\n' + (r.url || '')));
   }).catch(function (e) { pdfFailed(e, 'statement', mk); });
 }
+/* ---------- App updates (admin only) ---------- */
+var UPD = { loaded: false, loading: false, hasToken: false, editToken: false, busy: '', res: null, done: '' };
+function updatesCard() {
+  if (!isAdmin()) return '';
+  if (!UPD.loaded && !UPD.loading) { UPD.loading = true; serverCall('updateStatus', {}).then(function (r) { UPD.hasToken = !!r.hasToken; }).catch(function () {}).then(function () { UPD.loaded = true; UPD.loading = false; if (S.view === 'partners' && !document.querySelector('.scrim')) render(); }); }
+  var h = '<section class="card"><div class="card-head"><h3>App updates</h3><span class="small muted">Admin only</span></div>';
+  h += '<div class="kv">' + kvc('Installed version', esc(DB.appVersion || '—')) + kvc('GitHub', !UPD.loaded ? '…' : UPD.hasToken ? 'Connected' : 'Not connected') + '</div>';
+  if (UPD.loaded && (!UPD.hasToken || UPD.editToken)) {
+    h += '<div class="fields" style="margin-top:12px"><div class="field full"><label for="ghToken">GitHub token</label><input id="ghToken" type="password" autocomplete="off" placeholder="github_pat_…"></div></div>' +
+      '<p class="small muted" style="margin:6px 0 0">A read-only token for the saf-rental-app repository. It is kept in the app\'s private settings, never in the code.</p>' +
+      '<div class="btn-row" style="margin-top:10px"><button class="btn primary sm" type="button" data-act="updToken"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'token' ? 'Checking…' : 'Save token') + '</button>' + (UPD.hasToken ? '<button class="btn ghost sm" type="button" data-act="updTokenCancel">Cancel</button>' : '') + '</div>';
+  } else if (UPD.loaded) {
+    if (UPD.done) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>Updated to ' + esc(UPD.done) + '</b><span class="small">Close the app fully and open it again.</span></span></div>';
+    else if (UPD.res && !UPD.res.newer) h += '<div class="alert" style="background:var(--good-bg);margin-top:12px"><span style="color:var(--good)">' + icon('in') + '</span><span><b>You have the latest version</b></span></div>';
+    else if (UPD.res && UPD.res.newer) h += '<div class="alert warn" style="margin-top:12px"><span>' + icon('in') + '</span><span><b>New version ' + esc(UPD.res.latest) + ' is ready</b><span class="small">' + esc(UPD.res.notes || '') + '</span></span></div>' +
+      '<div class="btn-row" style="margin-top:10px"><button class="btn ghost sm" type="button" data-act="updCancel"' + (UPD.busy ? ' disabled' : '') + '>Cancel</button><button class="btn primary sm" type="button" data-act="updApply"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'apply' ? 'Updating…' : 'Update now') + '</button></div>' +
+      (UPD.busy === 'apply' ? '<p class="small muted" style="margin:8px 0 0">This takes about half a minute. Keep the app open.</p>' : '');
+    if (!(UPD.res && UPD.res.newer) && !UPD.done) h += '<div class="btn-row" style="margin-top:12px"><button class="btn ghost sm" type="button" data-act="updCheck"' + (UPD.busy ? ' disabled' : '') + '>' + (UPD.busy === 'check' ? 'Checking…' : 'Check for updates') + '</button><button class="btn ghost sm" type="button" data-act="updTokenEdit">Change GitHub token</button></div>';
+  }
+  return h + '</section>';
+}
+function updAct(act) {
+  if (act === 'updTokenEdit') { UPD.editToken = true; return render(); }
+  if (act === 'updTokenCancel') { UPD.editToken = false; return render(); }
+  if (act === 'updCancel') { UPD.res = null; return render(); }
+  var name = { updToken: 'token', updCheck: 'check', updApply: 'apply' }[act]; if (!name || UPD.busy) return;
+  var pr;
+  if (act === 'updToken') { var tk = val('ghToken'); if (!tk) return toast('Paste the GitHub token first.', true); pr = serverCall('saveGithubToken', { token: tk }).then(function (r) { UPD.hasToken = !!r.hasToken; UPD.editToken = false; toast('GitHub connected'); }); }
+  if (act === 'updCheck') pr = serverCall('checkUpdate', {}).then(function (r) { UPD.res = r; UPD.done = ''; });
+  if (act === 'updApply') pr = serverCall('applyUpdate', {}).then(function (r) { UPD.done = r.version; UPD.res = null; });
+  UPD.busy = name; render();
+  pr.catch(function (e) { toast(e.message, true); }).then(function () { UPD.busy = ''; render(); });
+}
+
 function statementCard() {
   var months = {}; ['Payments', 'Expenses'].forEach(function (k) { T(k).forEach(function (x) { if (x.Date) months[monthKey(x.Date)] = 1; }); });
   months[isoDate(new Date()).slice(0, 7)] = 1;
@@ -1987,6 +2022,7 @@ document.addEventListener('click', function (ev) {
   else if (act === 'agreement') { var ls = M.lastSig; closeSheet(); M.lastSig = ls; openAgreement(id); }
   else if (act === 'statement') { var mk = id || val('stMonth'); closeSheet(); openStatement(mk); }
   else if (act === 'sharePdf') sharePdf();
+  else if (/^upd/.test(act)) updAct(act);
   else if (act === 'rate') { closeSheet(); openRate(id); }
   else if (act === 'enqBook' || act === 'enqCheckout') enquiryToBooking(id, act === 'enqCheckout');
   else if (act === 'trip') { closeSheet(); openTrip(id); }
@@ -2203,6 +2239,10 @@ var Mock = (function () {
     },
     rate: function (p) { var t = tbl('Trips').filter(function (x) { return x['Trip ID'] === p.tripId; })[0]; if (!t) throw new Error('Trip not found.'); t.Rating = p.rating; t['Rating Note'] = p.note || ''; log('Rated customer', t['Customer Name'] + ' · ' + p.rating); return true; },
     makePdf: function () { return { demo: true }; },
+    updateStatus: function () { return { current: 'preview', hasToken: true }; },
+    saveGithubToken: function () { return { hasToken: true }; },
+    checkUpdate: function () { return { current: 'preview', latest: '2026-10-19.1', notes: 'Preview only. Updates run in the real app.', newer: false }; },
+    applyUpdate: function () { throw new Error('Updates run only in the real app.'); },
     workshop: function (p) {
       var v = veh(p.vehicleId); if (!v['Vehicle ID']) throw new Error('Choose a car.');
       if (p.on) {
@@ -2404,6 +2444,11 @@ var ML = {
   'Rated bad before': 'മുമ്പ് മോശം റേറ്റിങ്', 'Business Name': 'ബിസിനസിന്റെ പേര്', 'Business Phone': 'ബിസിനസ് ഫോൺ', 'Business Address': 'ബിസിനസ് വിലാസം', 'Agreement Terms': 'എഗ്രിമെന്റ് നിബന്ധനകൾ',
   'Late Grace Hours': 'വൈകാവുന്ന മണിക്കൂർ', 'Km Per Day Limit': 'ദിവസ km ലിമിറ്റ്', 'Extra Km Rate': 'അധിക km നിരക്ക്', 'Expiry Warning Days': 'കാലാവധി മുന്നറിയിപ്പ് ദിവസം', 'Currency': 'കറൻസി',
   'Km limit 0 means no limit. Phone, address and terms are printed on rental agreements; write one term per line.': 'Km ലിമിറ്റ് 0 എങ്കിൽ പരിധിയില്ല. ഫോൺ, വിലാസം, നിബന്ധനകൾ എഗ്രിമെന്റിൽ അച്ചടിക്കും; ഓരോ നിബന്ധനയും ഓരോ വരിയിൽ എഴുതുക.',
+  'App updates': 'ആപ്പ് അപ്ഡേറ്റ്', 'Admin only': 'അഡ്മിൻ മാത്രം', 'Installed version': 'ഇപ്പോഴത്തെ വേർഷൻ', 'Connected': 'കണക്റ്റ് ചെയ്തു', 'Not connected': 'കണക്റ്റ് ചെയ്തിട്ടില്ല',
+  'GitHub token': 'GitHub ടോക്കൺ', "A read-only token for the saf-rental-app repository. It is kept in the app's private settings, never in the code.": 'saf-rental-app-നുള്ള വായിക്കാൻ മാത്രമുള്ള ടോക്കൺ. ഇത് ആപ്പിന്റെ സ്വകാര്യ സെറ്റിങ്സിൽ സൂക്ഷിക്കും, കോഡിൽ ഇല്ല.',
+  'Save token': 'ടോക്കൺ സേവ് ചെയ്യുക', 'Checking…': 'പരിശോധിക്കുന്നു…', 'Close the app fully and open it again.': 'ആപ്പ് പൂർണമായി അടച്ച് വീണ്ടും തുറക്കുക.', 'You have the latest version': 'ഏറ്റവും പുതിയ വേർഷൻ തന്നെയാണ്',
+  'Update now': 'ഇപ്പോൾ അപ്ഡേറ്റ് ചെയ്യുക', 'Updating…': 'അപ്ഡേറ്റ് ചെയ്യുന്നു…', 'This takes about half a minute. Keep the app open.': 'ഏകദേശം അര മിനിറ്റ് എടുക്കും. ആപ്പ് തുറന്നു വെക്കുക.',
+  'Check for updates': 'അപ്ഡേറ്റ് ഉണ്ടോ എന്ന് നോക്കുക', 'Change GitHub token': 'GitHub ടോക്കൺ മാറ്റുക', 'Paste the GitHub token first.': 'ആദ്യം GitHub ടോക്കൺ പേസ്റ്റ് ചെയ്യുക.', 'GitHub connected': 'GitHub കണക്റ്റ് ചെയ്തു', 'Updated the app': 'ആപ്പ് അപ്ഡേറ്റ് ചെയ്തു',
   'PIN set': 'PIN ഉണ്ട്', 'No PIN': 'PIN ഇല്ല', 'No PIN yet': 'PIN ഇല്ല', 'split by ownership': 'ഉടമസ്ഥത അനുസരിച്ച്',
   'Recorded as a cash handover': 'പണം കൈമാറ്റമായി രേഖപ്പെടുത്തും', 'Recorded as a dividend': 'ഡിവിഡന്റായി രേഖപ്പെടുത്തും',
   /* Server messages */
@@ -2489,6 +2534,8 @@ var ML_RX = [
   [/^(\d+) of (\d+) enquiries booked$/, function (m) { return m[2] + ' അന്വേഷണത്തിൽ ' + m[1] + ' ബുക്കായി'; }],
   [/^(\d+) (good|bad|OK)$/, function (m) { return m[1] + ' ' + { good: 'നല്ലത്', bad: 'മോശം', OK: 'ശരി' }[m[2]]; }],
   [/^Rated bad on (\d\d\/\d\d\/\d{4})$/, function (m) { return m[1] + '-ന് മോശം റേറ്റിങ്'; }],
+  [/^Updated to (.+)$/, function (m) { return m[1] + ' ആയി അപ്ഡേറ്റ് ചെയ്തു'; }],
+  [/^New version (.+) is ready$/, function (m) { return 'പുതിയ വേർഷൻ ' + m[1] + ' തയ്യാർ'; }],
   [/^bill ([\d,]+)$/, function (m) { return 'ബിൽ ' + m[1]; }],
   [/^Deleted entry$/, function () { return 'എൻട്രി ഡിലീറ്റ് ചെയ്തു'; }]
 ];
