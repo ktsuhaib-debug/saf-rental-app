@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saf-rental",
+  "main": "src/worker.mjs",
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "public",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  },
+  // Wrangler 4.45+ creates the database and the bucket on the first deploy and links them.
+  "d1_databases": [
+    { "binding": "DB", "database_name": "saf-rental" }
+  ],
+  "r2_buckets": [
+    { "binding": "FILES", "bucket_name": "saf-rental-files" }
+  ],
+  // 02:30 UTC = 8:00 India time. The morning summary only goes out if the admin switched it on.
+  "triggers": { "crons": ["30 2 * * *"] },
+  "observability": { "enabled": true }
+}

@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-19.5",
-  "notes": "Telegram card refreshes each time the Partners tab opens, so newly connected partners show up.",
-  "files": ["Code.gs", "Index.html"]
+  "version": "2026-10-24.1",
+  "notes": "Moved to Cloudflare: Worker + D1 database + R2 for photos and PDFs. The Google Sheet is now a copy that refreshes every 5 minutes.",
+  "files": ["Code.gs", "Index.html", "Cloudflare.gs"]
 }

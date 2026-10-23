@@ -13,3 +13,6 @@
 .clasprc.json
 node_modules/
 .DS_Store
+.wrangler/
+.dev.vars
+tests/.out/
