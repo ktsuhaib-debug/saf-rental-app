@@ -26,8 +26,9 @@ function createSql() {
     lines.push(`CREATE TABLE IF NOT EXISTS ${q(t)} (_rid INTEGER PRIMARY KEY AUTOINCREMENT, ${cols});`);
     lines.push(`CREATE INDEX IF NOT EXISTS ${q('idx_' + t)} ON ${q(t)} (${q(SCHEMA[t][0])});`);
   });
-  const lit = (v) => (typeof v === 'number' ? String(v) : "'" + String(v).replace(/'/g, "''") + "'");
-  lines.push(`INSERT INTO "Settings" ("Key", "Value", "Notes") SELECT * FROM (${DEFAULT_SETTINGS.map((r) => 'SELECT ' + r.map(lit).join(', ')).join(' UNION ALL ')}) WHERE NOT EXISTS (SELECT 1 FROM "Settings");`);
+  // One row per default setting, read from a JSON list (D1 allows only a few UNION terms in one SELECT).
+  const json = JSON.stringify(DEFAULT_SETTINGS).replace(/'/g, "''");
+  lines.push(`INSERT INTO "Settings" ("Key", "Value", "Notes") SELECT json_extract(value, '$[0]'), json_extract(value, '$[1]'), json_extract(value, '$[2]') FROM json_each('${json}') WHERE NOT EXISTS (SELECT 1 FROM "Settings");`);
   lines.push(`INSERT OR REPLACE INTO _meta (k, v) VALUES ('schema', ${SCHEMA_VERSION});`);
   return lines.join('\n');
 }
