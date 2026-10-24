@@ -65,6 +65,10 @@ var DEFAULT_SETTINGS = [
 /* Web app entry                                                       */
 /* ------------------------------------------------------------------ */
 function doGet() {
+  // After the move to Cloudflare (Cloudflare.gs → cfSwitchOver) this link only points to the new app.
+  var moved = typeof cfMovedTo_ === 'function' ? cfMovedTo_() : '';
+  if (moved) return HtmlService.createHtmlOutput(cfMovedPage_(moved)).setTitle('SAF Rental has moved')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1').setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
   var out = HtmlService.createHtmlOutputFromFile('Index')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
   var name = APP_NAME, iconId = '';
@@ -124,6 +128,8 @@ function setup() {
  */
 function api(action, payload, token) {
   try {
+    var moved = typeof cfMovedTo_ === 'function' ? cfMovedTo_() : '';
+    if (moved) return JSON.stringify({ ok: false, error: 'SAF Rental has moved to ' + moved + ' — open that link. Nothing was saved here.', code: 'MOVED' });
     ensureSchema_();
     if (action === 'partnerNames') return JSON.stringify({ ok: true, data: partnerNames_() });
     if (action === 'login') return JSON.stringify({ ok: true, data: login_(payload || {}) });
