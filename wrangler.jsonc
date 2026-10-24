@@ -6,6 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
+  // Keep variables added in the Cloudflare dashboard (like SYNC_KEY) when GitHub updates are deployed.
+  "keep_vars": true,
   "assets": {
     "directory": "public",
     "binding": "ASSETS",
