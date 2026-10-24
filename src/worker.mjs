@@ -38,10 +38,16 @@ async function route(request, env, ctx) {
   if (path === '/api/health') return json({ ok: true, version: APP_VERSION });
   if (path.startsWith('/api/')) {
     if (!(await syncKeyOk(request, env))) return json({ ok: false, error: 'Not allowed.' }, 401);
-    if (path === '/api/report' && method === 'GET') return report(url, env);
-    if (path === '/api/admin/import' && method === 'POST') return importData(request, env);
-    if (path === '/api/admin/stored' && method === 'GET') return storedFiles(env);
-    if (path.startsWith('/api/admin/file/') && method === 'PUT') return putFile(request, url, env);
+    // Only the Apps Script (which holds the key) reaches here, so the real error can be shown.
+    try {
+      if (path === '/api/report' && method === 'GET') return await report(url, env);
+      if (path === '/api/admin/import' && method === 'POST') return await importData(request, env);
+      if (path === '/api/admin/stored' && method === 'GET') return await storedFiles(env);
+      if (path.startsWith('/api/admin/file/') && method === 'PUT') return await putFile(request, url, env);
+    } catch (e) {
+      console.error(e);
+      return json({ ok: false, error: 'Server problem: ' + String(e && e.message ? e.message : e).slice(0, 500) }, 500);
+    }
     return json({ ok: false, error: 'Not found.' }, 404);
   }
   const res = await env.ASSETS.fetch(request);
