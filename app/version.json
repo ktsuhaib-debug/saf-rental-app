@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-24.1",
-  "notes": "Moved to Cloudflare: Worker + D1 database + R2 for photos and PDFs. The Google Sheet is now a copy that refreshes every 5 minutes.",
+  "version": "2026-10-24.2",
+  "notes": "Zooming is off in the app (no pinch or double-tap zoom). A photo opened full screen can be enlarged by tapping it.",
   "files": ["Code.gs", "Index.html", "Cloudflare.gs"]
 }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#1b2a4a">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -295,7 +295,13 @@ table.t td.r, table.t th.r { text-align: right; }
 @media (prefers-reduced-motion: reduce) { .ph-wait { animation: none; } }
 .gallery img, .gallery .ph-wait { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--surface-2); display: block; }
 .lightbox { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.9); display: grid; place-items: center; padding: 16px; }
-.lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; }
+.lightbox img { max-width: 100%; max-height: 90vh; border-radius: 8px; cursor: zoom-in; }
+/* The app itself does not zoom; a photo opened full screen can be enlarged by tapping it. */
+html { touch-action: pan-x pan-y; }
+.lightbox.big { overflow: auto; place-items: start; -webkit-overflow-scrolling: touch; }
+.lightbox.big img { max-width: none; max-height: none; width: 250%; cursor: zoom-out; }
+.lightbox .lb-close { position: fixed; top: calc(12px + env(safe-area-inset-top)); right: 12px; width: 44px; height: 44px; border: 0; border-radius: 22px; background: rgba(255,255,255,.18); color: #fff; font-size: 26px; line-height: 44px; cursor: pointer; z-index: 1; }
+.lightbox .lb-hint { position: fixed; bottom: calc(14px + env(safe-area-inset-bottom)); left: 0; right: 0; text-align: center; color: rgba(255,255,255,.75); font-size: 13px; pointer-events: none; }
 
 .toast { position: fixed; z-index: 70; left: 50%; transform: translateX(-50%); bottom: calc(140px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg);
   padding: 10px 16px; border-radius: 12px; font-weight: 600; font-size: 14px; max-width: calc(100% - 32px); box-shadow: var(--shadow); }
@@ -2118,7 +2124,13 @@ document.addEventListener('click', function (ev) {
       : '<div class="small muted">' + trips.length + ' past trip' + (trips.length === 1 ? '' : 's') + (c['ID Proof'] ? ' · ID proof on file, add a new one only if it changed' : '') + (sum(trips, function (t) { return t.Balance; }) > 0 ? ' · <b style="color:var(--warn)">' + money(sum(trips, function (t) { return t.Balance; })) + ' still due</b>' : '') + (prc.total && !prc.Bad ? ' · ' + ratingSummary(prc) : '') + '</div>');
   }
   else if (act === 'loadPhotos') { var box = el.parentNode.querySelector('.gallery'); el.remove(); loadPhotos(box); }
-  else if (act === 'zoom') { var lb = document.createElement('div'); lb.className = 'lightbox'; lb.innerHTML = '<img alt="Photo, full size" src="' + el.src + '">'; lb.addEventListener('click', function () { lb.remove(); }); document.body.appendChild(lb);
+  else if (act === 'zoom') { var lb = document.createElement('div'); lb.className = 'lightbox'; lb.innerHTML = '<button class="lb-close" type="button" aria-label="Close">×</button><img alt="Photo, full size" src="' + el.src + '"><div class="lb-hint">' + 'Tap the photo to zoom' + '</div>';
+    lb.addEventListener('click', function (e) {
+      if (e.target.tagName === 'IMG') { var big = lb.classList.toggle('big'); var hint = lb.querySelector('.lb-hint'); if (hint) hint.remove();
+        if (big) { var im = e.target, r = im.getBoundingClientRect(); requestAnimationFrame(function () { lb.scrollLeft = (lb.scrollWidth - lb.clientWidth) * ((e.clientX - r.left) / r.width); lb.scrollTop = (lb.scrollHeight - lb.clientHeight) * ((e.clientY - r.top) / r.height); }); }
+        return; }
+      lb.remove();
+    }); document.body.appendChild(lb);
     var zid = el.getAttribute('data-pid');
     if (zid && !DEMO) call('photos', { ids: [zid], full: true }).then(function (l) { var im = lb.querySelector('img'); if (im && l[0] && l[0].src) im.src = l[0].src; }).catch(function () {}); }
   else if (act === 'copyReceipt') { var txt = document.getElementById('receiptText').textContent; try { navigator.clipboard.writeText(txt).then(function () { toast('Copied'); }, function () { selectText('receiptText'); }); } catch (e) { selectText('receiptText'); } }
@@ -2510,7 +2522,7 @@ var ML = {
   'Customer signature': 'കസ്റ്റമറുടെ ഒപ്പ്', 'Customer signs here with a finger': 'കസ്റ്റമർ ഇവിടെ വിരൽ കൊണ്ട് ഒപ്പിടുക', 'Clear': 'മായ്ക്കുക', 'Signature box': 'ഒപ്പിടാനുള്ള സ്ഥലം', 'Agreement': 'എഗ്രിമെന്റ്',
   'The signature goes on the rental agreement PDF you can send after check-out.': 'ഈ ഒപ്പ് ചെക്ക് ഔട്ടിന് ശേഷം അയയ്ക്കുന്ന എഗ്രിമെന്റ് PDF-ൽ വരും.', 'Rental agreement': 'റെന്റൽ എഗ്രിമെന്റ്', 'Make agreement': 'എഗ്രിമെന്റ് ഉണ്ടാക്കുക', 'Later': 'പിന്നീട്',
   'Make the agreement PDF for': 'എഗ്രിമെന്റ് PDF:', 'and send it on WhatsApp now? You can also do this later from the trip.': '— ഇപ്പോൾ ഉണ്ടാക്കി WhatsApp-ൽ അയയ്ക്കണോ? ട്രിപ്പിൽ നിന്ന് പിന്നീടും ചെയ്യാം.',
-  'Making the PDF…': 'PDF ഉണ്ടാക്കുന്നു…', 'This takes a few seconds.': 'കുറച്ച് സെക്കൻഡ് എടുക്കും.', 'Preview. In the real app this is saved as a PDF in your Drive, ready to send.': 'പ്രിവ്യൂ. യഥാർത്ഥ ആപ്പിൽ ഇത് PDF ആയി Drive-ൽ സേവ് ആകും, അയയ്ക്കാൻ തയ്യാർ.',
+  'Tap the photo to zoom': 'സൂം ചെയ്യാൻ ഫോട്ടോയിൽ തൊടുക', 'Making the PDF…': 'PDF ഉണ്ടാക്കുന്നു…', 'This takes a few seconds.': 'കുറച്ച് സെക്കൻഡ് എടുക്കും.', 'Preview. In the real app this is saved as a PDF in your Drive, ready to send.': 'പ്രിവ്യൂ. യഥാർത്ഥ ആപ്പിൽ ഇത് PDF ആയി Drive-ൽ സേവ് ആകും, അയയ്ക്കാൻ തയ്യാർ.',
   'Saved in the app. Anyone with the link can open it.': 'ആപ്പിൽ സേവ് ചെയ്തു. ലിങ്ക് ഉള്ള ആർക്കും തുറക്കാം.',
   'Open PDF': 'PDF തുറക്കുക', 'Send on WhatsApp': 'WhatsApp-ൽ അയയ്ക്കുക', 'Share PDF file': 'PDF ഫയൽ ഷെയർ ചെയ്യുക', 'The PDF was not made': 'PDF ഉണ്ടാക്കാനായില്ല',
   'Sharing did not work here. Use Open PDF instead.': 'ഇവിടെ ഷെയർ നടന്നില്ല. "PDF തുറക്കുക" ഉപയോഗിക്കുക.', 'Still saving. Try again in a minute.': 'ഇപ്പോഴും സേവ് ചെയ്യുന്നു. ഒരു മിനിറ്റ് കഴിഞ്ഞ് ശ്രമിക്കുക.',
@@ -2714,6 +2726,8 @@ applyLang();
 
 /* ================= Start ================= */
 if (DEMO) document.getElementById('demoBar').hidden = false;
+['gesturestart', 'gesturechange'].forEach(function (n) { document.addEventListener(n, function (e) { e.preventDefault(); }, { passive: false }); });
+var lastTouch = 0; document.addEventListener('touchend', function (e) { var now = Date.now(); if (now - lastTouch < 300 && !e.target.closest('input, textarea, select')) e.preventDefault(); lastTouch = now; }, { passive: false });
 if (!DEMO && 'serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function () {});
 if (DEMO || getToken()) refresh(true); else showLogin();
 window.__RH = { setRole: function (r) { USER.role = r; render(); }, T: T, settlement: settlement, payoutPlan: payoutPlan, billableDays: billableDays, partnerSummary: partnerSummary, cashLedger: cashLedger, alerts: alerts };

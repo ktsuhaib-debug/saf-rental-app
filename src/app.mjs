@@ -11,7 +11,7 @@ import { recentActivity } from './store.mjs';
 
 export const APP_NAME = 'Rental Hub';
 // Shown under Partners → Team and settings. Keep it equal to app/version.json.
-export const APP_VERSION = '2026-10-24.1';
+export const APP_VERSION = '2026-10-24.2';
 
 const TZ_OFFSET_MIN = 330; // Asia/Kolkata, as in the Apps Script project. India has no daylight saving.
 const SESSION_DAYS = 30;
